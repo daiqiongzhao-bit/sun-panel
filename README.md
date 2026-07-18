@@ -186,7 +186,7 @@ docker run -d --restart=always -p 3030:3030 \
   -v ~/docker_data/cdf-panel/uploads:/app/uploads \
   -v ~/docker_data/cdf-panel/database:/app/database \
   --name cdf-panel \
-  cdf3275/cdf-panel:v1.0.0
+  cdf3275/cdf-panel:v1.2.0
 ```
 
 ```bash
@@ -525,7 +525,7 @@ docker run -d --restart=always -p 3030:3030 \
   -v ~/docker_data/cdf-panel/uploads:/app/uploads \
   -v ~/docker_data/cdf-panel/database:/app/database \
   --name cdf-panel \
-  cdf3275/cdf-panel:v1.0.0
+  cdf3275/cdf-panel:v1.2.0
 ```
 
 ```bash
