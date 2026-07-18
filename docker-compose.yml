@@ -1,0 +1,14 @@
+version: "3.2"
+
+services:
+  sun-panel:
+    image: 'sun-panel:v1.1.0'
+    container_name: sun-panel
+    volumes:
+    - ./conf:/app/conf
+    - ./uploads:/app/uploads
+    - ./database:/app/database
+    # - ./runtime:/app/runtime
+    ports:
+    - 3030:3030
+    restart: always
