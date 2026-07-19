@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { computed, h, onMounted, reactive, ref } from 'vue'
-import { NButton, NDataTable, NDropdown, NInput, NModal, NForm, NFormItem, NCheckbox, NSpace, NTag, useDialog, useMessage } from 'naive-ui'
+import { NButton, NDataTable, NDropdown, NInput, NModal, NForm, NFormItem, NCheckbox, NSwitch, NSpace, NTag, useDialog, useMessage } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import { getRoleList, createRole, updateRole, deleteRole } from '@/api/system/role'
 import { getPermissionMatrix, saveRolePermissions, getRolePermissions } from '@/api/system/permission'

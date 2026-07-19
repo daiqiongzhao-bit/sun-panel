@@ -44,10 +44,17 @@ func (a *BackupApi) CreateBackup(c *gin.Context) {
 		os.MkdirAll(backupDir, os.ModePerm)
 	}
 
-	timestamp := time.Now().Format("20060102150405")
-	fileName := fmt.Sprintf("%s_%s", timestamp, req.Name)
-	if req.Name == "" {
-		fileName = timestamp
+	today := time.Now().Format("20060102")
+
+	// 查询当天已有备份数量，生成递增序号
+	var todayCount int64
+	global.Db.Model(&models.Backup{}).Where("name LIKE ? AND created_at >= ?",
+		fmt.Sprintf("%s-%%", today), time.Now().Truncate(24*time.Hour)).Count(&todayCount)
+
+	seqNum := todayCount + 1
+	fileName := fmt.Sprintf("%s-%03d", today, seqNum)
+	if req.Name != "" {
+		fileName = fmt.Sprintf("%s-%s_%03d", today, req.Name, seqNum)
 	}
 
 	var filePath string
@@ -89,7 +96,7 @@ func (a *BackupApi) CreateBackup(c *gin.Context) {
 	}
 
 	backup := models.Backup{
-		Name:        req.Name,
+		Name:        fileName,
 		Mode:        req.Mode,
 		FilePath:    filePath,
 		Size:        backupSize,

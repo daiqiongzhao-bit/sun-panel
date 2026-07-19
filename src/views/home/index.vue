@@ -7,6 +7,7 @@ import { Clock, SearchBox, SystemMonitor, StickyNotes } from '@/components/deskM
 import { AnnouncementModal, SvgIcon } from '@/components/common'
 import { deletes, getListByGroupId, saveSort } from '@/api/panel/itemIcon'
 import { getList as getGroupList } from '@/api/panel/itemIconGroup'
+import { edit, getSiteFavicon } from '@/api/panel/itemIcon'
 
 import { setTitle, updateLocalUserInfo } from '@/utils/cmn'
 import { useAuthStore, usePanelState } from '@/store'
@@ -17,7 +18,7 @@ import { t } from '@/locales'
 import { getLogoConfig } from '@/api/system/systemSetting'
 
 // System logo config
-const systemLogoUrl = ref('/assets/logo.png')
+const systemLogoUrl = ref('/logo.png')
 const systemLogoSize = ref(80)
 
 // 背景图预加载
@@ -464,6 +465,50 @@ function handleAddItem(itemIconGroupId?: number) {
   if (itemIconGroupId)
     currentAddItenIconGroupId.value = itemIconGroupId
 }
+
+// 一键获取所有图标：批量从 URL 获取 favicon
+const batchFetchLoading = ref(false)
+async function handleBatchFetchIcons(itemGroupIndex: number) {
+  const group = items.value[itemGroupIndex]
+  if (!group?.items || group.items.length === 0) return
+
+  batchFetchLoading.value = true
+  let successCount = 0
+  let failCount = 0
+
+  for (let i = 0; i < group.items.length; i++) {
+    const item = group.items[i]
+    // 只处理有 URL 但没有图标或图标为空的条目
+    const url = (item.url || item.lanUrl || '').trim()
+    if (!url) continue
+    if (item.icon?.src && item.icon.src.length > 0) continue // 已有图标则跳过
+
+    try {
+      const { code, data } = await getSiteFavicon<{ iconUrl: string }>(url)
+      if (code === 0 && data?.iconUrl) {
+        // 更新该条目的图标并保存到后端
+        const updatedItem = { ...item, icon: { itemType: 2, src: data.iconUrl } }
+        await edit<Panel.ItemInfo>(updatedItem)
+        // 更新本地数据
+        items.value[itemGroupIndex].items[i] = { ...items.value[itemGroupIndex].items[i], icon: { itemType: 2, src: data.iconUrl } }
+        successCount++
+      }
+      else {
+        failCount++
+      }
+    }
+    catch {
+      failCount++
+    }
+    // 稍微延迟避免请求过快
+    await new Promise(resolve => setTimeout(resolve, 300))
+  }
+
+  batchFetchLoading.value = false
+  ms.success(`获取完成：成功 ${successCount} 个，失败 ${failCount} 个`)
+  // 刷新列表确保最新状态
+  getList()
+}
 </script>
 
 <template>
@@ -555,6 +600,19 @@ function handleAddItem(itemIconGroupId?: number) {
                 <span class="mr-2 cursor-pointer " :title="t('common.sort')" @click="handleSetSortStatus(itemGroupIndex, !itemGroup.sortStatus)">
                   <SvgIcon class="text-white font-xl" icon="ri:drag-drop-line" />
                 </span>
+                <NButton
+                  size="tiny"
+                  :loading="batchFetchLoading"
+                  quaternary
+                  type="info"
+                  style="color:#fff;--n-text-color-hover:#fff;"
+                  @click="handleBatchFetchIcons(itemGroupIndex)"
+                >
+                  <template #icon>
+                    <SvgIcon icon="iconamoon-search-fill" style="font-size:16px;" />
+                  </template>
+                  获取图标
+                </NButton>
               </div>
             </div>
 

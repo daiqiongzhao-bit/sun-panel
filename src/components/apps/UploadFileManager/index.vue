@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NAlert, NButton, NButtonGroup, NCard, NEllipsis, NGrid, NGridItem, NImage, NImageGroup, NSelect, NSpin, NUpload, useDialog, useMessage } from 'naive-ui'
+import { NAlert, NButton, NButtonGroup, NCard, NEllipsis, NGrid, NGridItem, NImage, NImageGroup, NSpin, NUpload, useDialog, useMessage, NTag } from 'naive-ui'
 import type { UploadFileInfo } from 'naive-ui'
 import { computed, onMounted, ref } from 'vue'
 import { deletes, getList } from '@/api/system/file'
@@ -11,11 +11,9 @@ import { t } from '@/locales'
 import { usePanelState } from '@/store'
 
 const FILE_CATEGORIES = [
-  { label: '全部', value: 'all' },
-  { label: '壁纸（主页背景）', value: 'wallpaper' },
-  { label: '图标', value: 'icon' },
-  { label: 'Logo', value: 'logo' },
-  { label: '登录页背景', value: 'loginBg' },
+  { label: '全部文件', value: 'all' },
+  { label: '🖼️ 壁纸', value: 'wallpaper' },
+  { label: '🎨 图标', value: 'icon' },
 ]
 
 interface InfoModalState {
@@ -36,18 +34,44 @@ const infoModalState = ref<InfoModalState>({
   fileInfo: null,
 })
 
-// 根据文件名判断文件类型
+// 根据文件路径和名称判断文件类型（壁纸 vs 图标两大类）
 function getFileCategory(file: File.Info): string {
   const src = (file.src || '').toLowerCase()
   const fileName = (file.fileName || '').toLowerCase()
-  if (src.includes('/logo/') || fileName.includes('logo'))
-    return 'logo'
-  if (src.includes('/background/') || fileName.includes('background') || fileName.includes('bg'))
-    return 'loginBg'
-  if (src.includes('/icon/') || fileName.includes('icon') || fileName.includes('favicon'))
+
+  // 图标类：明确的图标路径/名称特征
+  if (src.includes('/icon/') || src.includes('/logo/') || fileName.includes('icon') || fileName.includes('favicon')
+    || fileName.includes('.ico') || fileName.includes('logo'))
     return 'icon'
-  // 默认为壁纸类
+
+  // 图标类：小尺寸图片（<200KB）且文件名为 UUID/哈希格式（典型的 favicon 自动获取结果）
+  const fileSize = Number(file.size) || 0
+  const isSmallImage = fileSize > 0 && fileSize < 200 * 1024 // < 200KB
+  const isHashLikeFileName = /^[a-f0-9\-]{8,}\.(png|jpg|jpeg|ico|svg|webp)$/.test(fileName)
+  if (isSmallImage && isHashLikeFileName)
+    return 'icon'
+
+  // 壁纸类（background目录、登录背景、主页背景、wallpaper等，其余默认也归壁纸）
+  if (src.includes('/background/') || fileName.includes('background') || fileName.includes('bg')
+    || fileName.includes('loginbg') || fileName.includes('壁纸') || fileName.includes('wallpaper')
+    || fileName.includes('风景') || fileName.includes('桌面') || fileName.includes('landscape'))
+    return 'wallpaper'
+  // 默认为壁纸类（大多数上传的是壁纸/背景图）
   return 'wallpaper'
+}
+
+// 获取分类的显示标签
+function getCategoryLabel(category: string): string {
+  return FILE_CATEGORIES.find(c => c.value === category)?.label || '未知类型'
+}
+
+// 获取分类对应的标签颜色
+function getCategoryColor(category: string): string {
+  switch (category) {
+    case 'icon': return 'info'
+    case 'wallpaper': return 'default'
+    default: return 'default'
+  }
 }
 
 const filteredImageList = computed(() => {
@@ -142,14 +166,17 @@ function handleSetLogo(imgSrc: string) {
 function handleQuickSet(item: File.Info) {
   const category = getFileCategory(item)
   switch (category) {
-    case 'loginBg':
-      handleSetLoginBg(item.src)
-      break
-    case 'logo':
+    case 'icon':
       handleSetLogo(item.src)
       break
     default:
-      handleSetWallpaper(item.src)
+      // 壁纸类：根据原始特征判断设为主页背景还是登录背景
+      const src = (item.src || '').toLowerCase()
+      const fileName = (item.fileName || '').toLowerCase()
+      if (src.includes('/background/') || fileName.includes('loginbg') || fileName.includes('login'))
+        handleSetLoginBg(item.src)
+      else
+        handleSetWallpaper(item.src)
       break
   }
 }
@@ -181,15 +208,22 @@ onMounted(() => {
         </NButton>
       </NUpload>
     </div>
-    <!-- 分类筛选 -->
-    <div class="flex justify-center mt-2 mb-2">
-      <NSelect
-        v-model:value="selectedCategory"
-        :options="FILE_CATEGORIES"
+    <!-- 分类筛选（标签按钮） -->
+    <div class="flex justify-center flex-wrap gap-2 mt-2 mb-3">
+      <NButton
+        v-for="cat in FILE_CATEGORIES"
+        :key="cat.value"
+        :type="selectedCategory === cat.value ? 'primary' : 'default'"
+        :ghost="selectedCategory !== cat.value"
         size="small"
-        style="width: 200px"
-        placeholder="筛选文件类型"
-      />
+        round
+        @click="selectedCategory = cat.value"
+      >
+        {{ cat.label }}
+        <span v-if="cat.value !== 'all'" class="ml-1 text-xs opacity-70">
+          ({{ imageList.filter(item => getFileCategory(item) === cat.value).length }})
+        </span>
+      </NButton>
     </div>
     <div class="flex justify-center mt-2">
       <div v-if="filteredImageList.length === 0 && !loading" class="flex">
@@ -210,7 +244,11 @@ onMounted(() => {
                     {{ item.fileName }}
                   </NEllipsis>
                 </span>
-                <span class="text-xs text-gray-400 block text-center">{{ FILE_CATEGORIES.find(c => c.value === getFileCategory(item))?.label || '壁纸' }}</span>
+                <div class="flex justify-center mt-[6px]">
+                  <NTag :type="getCategoryColor(getFileCategory(item))" size="small" round>
+                    {{ getCategoryLabel(getFileCategory(item)) }}
+                  </NTag>
+                </div>
                 <div class="flex justify-center mt-[10px]">
                   <NButtonGroup>
                     <NButton size="tiny" tertiary style="cursor: pointer;" :title="$t('apps.uploadsFileManager.copyLink')" @click="copyImageUrl(item.src)">

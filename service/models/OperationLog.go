@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 // 操作日志
 type OperationLog struct {
 	BaseModel
@@ -17,7 +19,7 @@ type OperationLog struct {
 	Remark      string `gorm:"type:varchar(500)" json:"remark"`            // 备注
 }
 
-func (m *OperationLog) GetList(page, pageSize int, keyword, module string) ([]OperationLog, int64, error) {
+func (m *OperationLog) GetList(page, pageSize int, keyword, module string, startTime, endTime *time.Time) ([]OperationLog, int64, error) {
 	var list []OperationLog
 	var count int64
 	offset := (page - 1) * pageSize
@@ -28,6 +30,12 @@ func (m *OperationLog) GetList(page, pageSize int, keyword, module string) ([]Op
 	}
 	if module != "" {
 		db = db.Where("module=?", module)
+	}
+	if startTime != nil {
+		db = db.Where("created_at >= ?", *startTime)
+	}
+	if endTime != nil {
+		db = db.Where("created_at <= ?", *endTime)
 	}
 
 	err := db.Count(&count).Offset(offset).Limit(pageSize).Order("id desc").Find(&list).Error

@@ -68,15 +68,12 @@ export default defineConfig((env) => {
       rollupOptions: {
         output: {
           manualChunks(id) {
-            // naive-ui 是非常大的UI库，单独分包
-            if (id.includes('node_modules/naive-ui')) {
-              return 'naive-ui'
-            }
-            // vue 生态
-            if (id.includes('node_modules/vue') || id.includes('node_modules/@vue') || id.includes('node_modules/pinia') || id.includes('node_modules/vue-router')) {
-              return 'vue-vendor'
-            }
-            // 其他第三方库
+            // 所有 node_modules 合并到单个 vendor chunk。
+            // 原因：naive-ui / vooks / evtd 等库之间存在循环依赖，若拆成多个
+            // chunk（naive-ui / vue-vendor / vendor）会在跨 chunk 初始化时触发
+            // "Cannot access 'X' before initialization" 的 TDZ 错误导致整页白屏。
+            // 合并为单一 chunk 后，Rollup 会在 chunk 内部按依赖顺序解析循环依赖，
+            // 彻底消除该问题。
             if (id.includes('node_modules')) {
               return 'vendor'
             }

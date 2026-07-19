@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 // 登录日志
 type LoginLog struct {
 	BaseModel
@@ -12,7 +14,7 @@ type LoginLog struct {
 	Remark    string `gorm:"type:varchar(255)" json:"remark"`           // 备注(失败原因等)
 }
 
-func (m *LoginLog) GetList(page, pageSize int, keyword string) ([]LoginLog, int64, error) {
+func (m *LoginLog) GetList(page, pageSize int, keyword string, startTime, endTime *time.Time) ([]LoginLog, int64, error) {
 	var list []LoginLog
 	var count int64
 	offset := (page - 1) * pageSize
@@ -20,6 +22,12 @@ func (m *LoginLog) GetList(page, pageSize int, keyword string) ([]LoginLog, int6
 	db := Db.Model(m)
 	if keyword != "" {
 		db = db.Where("username LIKE ? OR ip LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
+	}
+	if startTime != nil {
+		db = db.Where("created_at >= ?", *startTime)
+	}
+	if endTime != nil {
+		db = db.Where("created_at <= ?", *endTime)
 	}
 
 	err := db.Count(&count).Offset(offset).Limit(pageSize).Order("id desc").Find(&list).Error

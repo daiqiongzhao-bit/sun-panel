@@ -40,15 +40,24 @@ const departmentOptions = ref<SelectOption[]>([])
 
 async function loadRoles() {
   try {
-    const { data } = await getRoleList<Common.ListResponse<any>>({ pageNum: 1, pageSize: 100 })
-    if (data && data.list) {
+    const { data } = await getRoleList<Common.ListResponse<any>>({ pageNum: 1, pageSize: 1000 })
+    if (data && data.list && data.list.length > 0) {
       roleOtions.value = data.list.map((role: any) => ({
         label: role.name,
         value: role.id,
       }))
     }
-  } catch (e) {
-    // Fallback to hardcoded roles
+    else {
+      // 无角色数据时提供基础选项
+      roleOtions.value = [
+        { label: t('common.role.admin'), value: 1 },
+        { label: t('common.role.regularUser'), value: 2 },
+        { label: t('common.role.deptAdmin'), value: 3 },
+      ]
+    }
+  }
+  catch (e) {
+    // 角色列表加载失败时提供基础选项
     roleOtions.value = [
       { label: t('common.role.admin'), value: 1 },
       { label: t('common.role.regularUser'), value: 2 },

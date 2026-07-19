@@ -204,13 +204,15 @@ function convertBookmarksToIconGroups(bookmarks: BookmarkNode[]): IconGroup[] {
   const groups: IconGroup[] = []
 
   function processNodes(nodes: BookmarkNode[], parentGroup?: IconGroup) {
+    if (!nodes || !Array.isArray(nodes)) return
     const leafItems: Panel.ItemInfo[] = []
 
     for (const node of nodes) {
-      if (node.url) {
+      if (!node) continue
+      if (node.url && typeof node.url === 'string' && node.url.trim()) {
         leafItems.push({
-          title: node.title,
-          url: node.url,
+          title: node.title || '未命名',
+          url: node.url.trim(),
           icon: '',
           sort: leafItems.length,
           openMethod: 1,
@@ -218,8 +220,8 @@ function convertBookmarksToIconGroups(bookmarks: BookmarkNode[]): IconGroup[] {
           description: '',
         })
       }
-      else if (node.children && node.children.length > 0) {
-        processNodes(node.children, { title: node.title, sort: groups.length, children: [] })
+      else if (node.children && Array.isArray(node.children) && node.children.length > 0) {
+        processNodes(node.children, { title: node.title || '未命名文件夹', sort: groups.length, children: [] })
       }
     }
 
@@ -246,23 +248,58 @@ function handleBookmarkFile(options: { file: UploadFileInfo; fileList: Array<Upl
     reader.onload = () => {
       try {
         const html = reader.result as string
-        const bookmarks = parseBookmarkHtml(html)
-        if (bookmarks.length === 0) {
-          ms.warning('未解析到书签数据')
+        if (!html || html.trim().length === 0) {
+          ms.warning('书签文件内容为空')
           bookmarkLoading.value = false
           return
         }
+        const bookmarks = parseBookmarkHtml(html)
+        if (!bookmarks || bookmarks.length === 0) {
+          ms.warning('未解析到书签数据，请确保文件格式正确（Chrome/Firefox/Edge导出的HTML书签）')
+          bookmarkLoading.value = false
+          return
+        }
+        // 递归统计所有书签节点（含子文件夹）
+        function countAll(nodes: BookmarkNode[]): number {
+          let c = 0
+          for (const n of nodes) {
+            if (n.url) c++
+            if (n.children && n.children.length > 0) c += countAll(n.children)
+          }
+          return c
+        }
+        const totalCount = countAll(bookmarks)
+        if (totalCount === 0) {
+          ms.warning('未解析到有效的书签链接')
+          bookmarkLoading.value = false
+          return
+        }
+
         const iconGroups = convertBookmarksToIconGroups(bookmarks)
-        const exportResult = exportJson(version.value)
+        if (!iconGroups || iconGroups.length === 0) {
+          ms.warning('书签转换失败，未能生成图标分组')
+          bookmarkLoading.value = false
+          return
+        }
+
+        // 使用当前版本号，若未加载完成则使用默认值
+        const currentVersion = version.value || 'unknown'
+        const exportResult = exportJson(currentVersion)
         exportResult.addIconsData(iconGroups)
         exportResult.exportFile()
-        ms.success(`已转换 ${bookmarks.length} 条书签，请将导出的JSON文件导入到图标配置`)
-        bookmarkLoading.value = false
+        ms.success(`已转换 ${totalCount} 条书签到 ${iconGroups.length} 个分组，请将导出的JSON文件导入到图标配置`)
       }
       catch (e) {
-        bookmarkLoading.value = false
-        ms.error('书签文件解析失败')
+        console.error('书签转换错误:', e)
+        ms.error(`书签文件解析失败: ${e instanceof Error ? e.message : '未知错误'}`)
       }
+      finally {
+        bookmarkLoading.value = false
+      }
+    }
+    reader.onerror = () => {
+      ms.error('读取文件失败')
+      bookmarkLoading.value = false
     }
     reader.readAsText(options.file.file)
   }
