@@ -30,6 +30,7 @@ const logoError = ref(false)
 const twoFaStep = ref(false)
 const twoFaToken = ref('')
 const twoFaCode = ref('')
+const formRef = ref<any>(null)
 
 async function loadLoginConfig() {
   try {
@@ -76,6 +77,17 @@ const bgLoaded = ref(false)
 
 onMounted(() => {
   loadLoginConfig()
+  // NForm 不转发 submit 事件，某些浏览器/环境下 NButton @click 也不触发，
+  // 直接给原生 form 绑定 submit 监听器，确保点击登录按钮能发起请求。
+  setTimeout(() => {
+    const nativeForm = formRef.value?.$el
+    if (nativeForm && nativeForm.tagName === 'FORM') {
+      nativeForm.addEventListener('submit', (e: Event) => {
+        e.preventDefault()
+        twoFaStep.value ? login2faPost() : handleSubmit()
+      })
+    }
+  }, 0)
 })
 
 // const isShowCaptcha = ref<boolean>(false)
@@ -97,7 +109,6 @@ const finishLogin = (data: Login.LoginResponse) => {
 }
 
 const loginPost = async () => {
-  console.log('[DEBUG] loginPost called', form.value.username, form.value.password ? 'has-pass' : 'no-pass')
   if (!form.value.username) {
     ms.warning('请输入用户名')
     return
@@ -108,9 +119,7 @@ const loginPost = async () => {
   }
   loading.value = true
   try {
-    console.log('[DEBUG] calling login API')
     const res = await login<Login.LoginResponse>(form.value)
-    console.log('[DEBUG] login response', res)
     if (res.code === 0) {
       // 需要两步验证：进入第二步
       if (res.data.needTwoFA && res.data.twoFaToken) {
@@ -203,6 +212,7 @@ function handleChangeLanuage(value: Language) {
         </NGradientText>
       </div>
       <NForm
+        ref="formRef"
         :model="form"
         label-width="100px"
         @submit.prevent="twoFaStep ? login2faPost() : handleSubmit"
