@@ -2,11 +2,18 @@
 import { onMounted, reactive, ref } from 'vue'
 import { NButton, NInput, NSlider, NSpace, NSwitch, NSelect, NCard, NGrid, NGridItem, useMessage } from 'naive-ui'
 import { getLogoConfig, setLogoConfig, uploadLogo, getBackgroundConfig, setBackgroundConfig, uploadBackground, getPresetBackgrounds } from '@/api/system/systemSetting'
+import { getLoginConfig, setLoginConfig } from '@/api/openness'
 import { t } from '@/locales'
 
 const message = useMessage()
 
-const activeTab = ref<'logo' | 'background' | 'stickyNote'>('logo')
+const activeTab = ref<'logo' | 'background' | 'stickyNote' | 'loginSecurity'>('logo')
+
+// 登录安全配置
+const loginSecurity = reactive({
+  loginCaptcha: false,
+  loginAllowIps: '',
+})
 
 const logoConfig = reactive({
   imageUrl: '/assets/logo.png',
@@ -80,6 +87,24 @@ function loadStickyNoteConfig() {
       stickyNoteConfig.transparent = !!cfg.transparent
     }
   } catch { /* ignore */ }
+}
+
+async function loadLoginSecurity() {
+  const { data } = await getLoginConfig<any>()
+  if (data) {
+    loginSecurity.loginCaptcha = !!data.loginCaptcha
+    loginSecurity.loginAllowIps = data.loginAllowIps || ''
+  }
+}
+
+async function handleSaveLoginSecurity() {
+  const result = await setLoginConfig({
+    loginCaptcha: loginSecurity.loginCaptcha,
+    loginAllowIps: loginSecurity.loginAllowIps,
+  })
+  if (result.code === 0) {
+    message.success(t('common.success'))
+  }
 }
 
 function saveStickyNoteConfig() {
@@ -158,6 +183,7 @@ onMounted(() => {
   loadBackgroundConfig()
   loadPresetBackgrounds()
   loadStickyNoteConfig()
+  loadLoginSecurity()
 })
 </script>
 
@@ -172,6 +198,9 @@ onMounted(() => {
       </NButton>
       <NButton :type="activeTab === 'stickyNote' ? 'primary' : 'default'" @click="activeTab = 'stickyNote'">
         便签
+      </NButton>
+      <NButton :type="activeTab === 'loginSecurity' ? 'primary' : 'default'" @click="activeTab = 'loginSecurity'">
+        登录安全
       </NButton>
     </div>
 
@@ -356,6 +385,57 @@ onMounted(() => {
           </div>
         </div>
       </NCard>
+    </div>
+
+    <!-- 登录安全 -->
+    <div v-if="activeTab === 'loginSecurity'">
+      <NGrid cols="2" :x-gap="24">
+        <NGridItem>
+          <NCard title="登录限制" class="h-full">
+            <div class="space-y-5">
+              <div class="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
+                <span class="text-sm text-blue-600 dark:text-blue-300">
+                  开启登录验证码可防止爆破；配置"允许登录 IP"后，仅列表内的 IP 可以登录，
+                  留空表示不限制。配置错误不会锁死已登录会话，仅拦截新的登录请求。
+                </span>
+              </div>
+
+              <div class="flex items-center justify-between py-2">
+                <div>
+                  <div class="font-medium">登录验证码</div>
+                  <div class="text-xs text-gray-500 mt-0.5">开启后登录页需输入图形验证码</div>
+                </div>
+                <NSwitch v-model:value="loginSecurity.loginCaptcha" />
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium mb-2">允许登录的 IP</label>
+                <NInput
+                  v-model:value="loginSecurity.loginAllowIps"
+                  type="textarea"
+                  :autosize="{ minRows: 3, maxRows: 6 }"
+                  placeholder="留空=不限制。多个用逗号分隔，支持 CIDR，例如：&#10;192.168.1.100, 10.0.0.0/24"
+                />
+                <p class="text-xs text-gray-500 mt-1">仅限制登录入口，不影响已登录用户的正常访问。</p>
+              </div>
+
+              <div class="flex justify-end">
+                <NButton type="primary" @click="handleSaveLoginSecurity">保存</NButton>
+              </div>
+            </div>
+          </NCard>
+        </NGridItem>
+        <NGridItem>
+          <NCard title="说明" class="h-full">
+            <ul class="list-disc list-inside space-y-2 text-sm text-gray-600 dark:text-gray-300">
+              <li>IP 白名单与登录验证码均在"系统设置 → 登录安全"中配置。</li>
+              <li>支持单个 IP（如 <code>203.0.113.5</code>）或网段（如 <code>192.168.0.0/16</code>）。</li>
+              <li>被拦截的 IP 在登录时会提示"当前 IP 不在允许登录的列表中"。</li>
+              <li>如误配导致自己无法登录，可通过服务器直接清空该配置项恢复。</li>
+            </ul>
+          </NCard>
+        </NGridItem>
+      </NGrid>
     </div>
   </div>
 </template>

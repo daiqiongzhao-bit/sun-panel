@@ -34,8 +34,6 @@ coverage
 .history
 service_node
 
-bindata.go
-service/assets/bindata.go
 service/conf
 service/lang
 service/database

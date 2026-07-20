@@ -34,7 +34,8 @@ type Register struct {
 }
 
 type Login struct {
-	LoginCaptcha bool `json:"loginCaptcha"` // 登录验证码
+	LoginCaptcha bool   `json:"loginCaptcha"`  // 登录验证码
+	LoginAllowIps string `json:"loginAllowIps"` // 允许登录的IP（逗号分隔，支持 CIDR，留空=不限制）
 }
 
 type ApplicationSetting struct {

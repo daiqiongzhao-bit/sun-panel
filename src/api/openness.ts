@@ -1,8 +1,15 @@
-import { get } from '@/utils/request'
+import { get, post } from '@/utils/request'
 
 export function getLoginConfig<T>() {
   return get<T>({
     url: '/openness/loginConfig',
+  })
+}
+
+export function setLoginConfig<T>(data: { loginCaptcha: boolean; loginAllowIps: string }) {
+  return post<T>({
+    url: '/openness/loginConfig',
+    data,
   })
 }
 

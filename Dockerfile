@@ -16,7 +16,7 @@ RUN pnpm install --unsafe-perm
 COPY . /build
 
 # 追加版本号到 .env，不要覆盖原有的 VITE_GLOB_API_URL 等配置
-RUN echo "VITE_APP_VERSION=1.0.0" >> /build/.env
+RUN echo "VITE_APP_VERSION=1.3.8" >> /build/.env
 
 RUN pnpm run build
 
@@ -29,13 +29,9 @@ COPY ./service .
 
 RUN go env -w GOPROXY=https://goproxy.cn,direct
 
-RUN apt-get update && apt-get install -y --no-install-recommends bash curl gcc git
+RUN apt-get update && apt-get install -y --no-install-recommends bash curl gcc
 
 RUN go env -w GO111MODULE=on \
-    && export PATH=$PATH:/go/bin \
-    && go install -v github.com/go-bindata/go-bindata/...@latest \
-    && go install -v github.com/elazarl/go-bindata-assetfs/...@latest \
-    && go-bindata-assetfs -o=assets/bindata.go -pkg=assets assets/... \
     && go mod tidy \
     && go build -o sun-panel --ldflags="-X sun-panel/global.RUNCODE=release -X sun-panel/global.ISDOCKER=docker" main.go
 

@@ -1,6 +1,7 @@
 package system
 
 import (
+	"net"
 	"strconv"
 	"strings"
 	"sync"
@@ -10,6 +11,7 @@ import (
 	"sun-panel/api/api_v1/common/base"
 	"sun-panel/global"
 	"sun-panel/lib/cmn"
+	"sun-panel/lib/cmn/systemSetting"
 	"sun-panel/lib/totp"
 	"sun-panel/models"
 
@@ -59,7 +61,46 @@ var twoFaSetup sync.Map
 // @Param LoginLoginVerify body LoginLoginVerify true "登陆验证信息"
 // @Tags user
 // @Router /login [post]
+// checkLoginAllowIps 校验客户端 IP 是否在允许登录的白名单内。
+// 未配置（空）则放行；配置读取失败时也放行，避免把自己锁死。
+func checkLoginAllowIps(c *gin.Context) bool {
+	cfg := systemSetting.ApplicationSetting{}
+	if err := global.SystemSetting.GetValueByInterface(systemSetting.SYSTEM_APPLICATION, &cfg); err != nil {
+		return true
+	}
+	allow := strings.TrimSpace(cfg.Login.LoginAllowIps)
+	if allow == "" {
+		return true
+	}
+	clientIP := net.ParseIP(c.ClientIP())
+	if clientIP == nil {
+		// 无法解析客户端 IP 时放行，避免误杀
+		return true
+	}
+	for _, item := range strings.Split(allow, ",") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if strings.Contains(item, "/") {
+			if _, ipnet, err := net.ParseCIDR(item); err == nil && ipnet.Contains(clientIP) {
+				return true
+			}
+		} else if allowIP := net.ParseIP(item); allowIP != nil && allowIP.Equal(clientIP) {
+			return true
+		}
+	}
+	return false
+}
+
 func (l LoginApi) Login(c *gin.Context) {
+	// IP 白名单校验（仅限制登录入口，不影响已登录访问）
+	if !checkLoginAllowIps(c) {
+		recordLoginLog(0, "", c, 2, "IP 不在允许登录白名单")
+		apiReturn.Error(c, "当前 IP 不在允许登录的列表中")
+		return
+	}
+
 	param := LoginLoginVerify{}
 	if err := c.ShouldBindJSON(&param); err != nil {
 		apiReturn.ErrorParamFomat(c, err.Error())
@@ -151,6 +192,11 @@ func (l LoginApi) Login(c *gin.Context) {
 // @Tags user
 // @Router /login/2fa [post]
 func (l LoginApi) Login2FA(c *gin.Context) {
+	if !checkLoginAllowIps(c) {
+		apiReturn.Error(c, "当前 IP 不在允许登录的列表中")
+		return
+	}
+
 	param := LoginTwoFAVerify{}
 	if err := c.ShouldBindJSON(&param); err != nil {
 		apiReturn.ErrorParamFomat(c, err.Error())
