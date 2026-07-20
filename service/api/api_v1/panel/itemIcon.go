@@ -227,7 +227,7 @@ func (a *ItemIcon) GetSiteFavicon(c *gin.Context) {
 		var cached models.File
 		if global.Db.Where("category=? AND file_name=? AND user_id=?", "icon", hu.Host, userInfo.ID).First(&cached).Error == nil && cached.Src != "" {
 			cfg := global.Config.GetValueString("base", "source_path")
-			if cmn.PathExists(cfg + cached.Src) {
+			if exists, _ := cmn.PathExists(cfg + cached.Src); exists {
 				resp.IconUrl = cached.Src
 				apiReturn.SuccessData(c, resp)
 				return

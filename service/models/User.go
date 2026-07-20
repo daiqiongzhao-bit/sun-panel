@@ -2,6 +2,8 @@ package models
 
 import (
 	"errors"
+
+	"gorm.io/gorm"
 )
 
 // 用户表
