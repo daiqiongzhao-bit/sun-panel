@@ -6,6 +6,7 @@ import { useAuthStore, useNoticeStore, useUserStore } from '@/store'
 import { getAuthInfo } from '@/api/system/user'
 import type { VisitMode } from '@/enums/auth'
 import { getListByDisplayType as getListByDisplayTypeApi } from '@/api/notice'
+import { markRead } from '@/api/system/noticeManage'
 
 const noticeStore = useNoticeStore()
 const userStore = useUserStore()
@@ -79,6 +80,8 @@ export function noticeCreate(info: Notice.NoticeInfo) {
                 noticeStore.setReadByGlobal(info.id)
                 console.log('设置全局已读', info.id)
               }
+              // 同步服务端已读（跨设备/清缓存）
+              markRead<Common.CommonResponse<unknown>>({ id: info.id }).catch(() => {})
             }
             n.destroy()
           },

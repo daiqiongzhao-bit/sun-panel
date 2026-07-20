@@ -24,5 +24,6 @@ func InitNoticeManageRouter(router *gin.RouterGroup) {
 	rUser := router.Group("", middleware.LoginInterceptor)
 	{
 		rUser.POST("/noticeManage/getVisibleNotices", api.GetVisibleNotices)
+		rUser.POST("/noticeManage/markRead", api.MarkRead)
 	}
 }

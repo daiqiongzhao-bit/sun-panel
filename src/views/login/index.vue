@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { NButton, NCard, NForm, NFormItem, NGradientText, NInput, NSelect, useMessage } from 'naive-ui'
 import { onMounted, ref } from 'vue'
-import { login } from '@/api'
+import { login, login2fa } from '@/api'
 import { useAppStore, useAuthStore } from '@/store'
 import { SvgIcon } from '@/components/common'
 import { router } from '@/router'
@@ -25,6 +25,11 @@ const bgDisplayMode = ref('cover')
 const logoUrl = ref('/logo.png')
 const logoSize = ref(80)
 const logoError = ref(false)
+
+// 两步验证(2FA)状态
+const twoFaStep = ref(false)
+const twoFaToken = ref('')
+const twoFaCode = ref('')
 
 async function loadLoginConfig() {
   try {
@@ -81,19 +86,29 @@ const form = ref<Login.LoginReqest>({
   password: '',
 })
 
+const finishLogin = (data: Login.LoginResponse) => {
+  authStore.setToken(data.token)
+  authStore.setUserInfo(data)
+  setTimeout(() => {
+    ms.success(`Hi ${data.name},${t('login.welcomeMessage')}`)
+    loading.value = false
+    router.push({ path: '/' })
+  }, 500)
+}
+
 const loginPost = async () => {
   loading.value = true
   try {
     const res = await login<Login.LoginResponse>(form.value)
     if (res.code === 0) {
-      authStore.setToken(res.data.token)
-      authStore.setUserInfo(res.data)
-
-      setTimeout(() => {
-        ms.success(`Hi ${res.data.name},${t('login.welcomeMessage')}`)
+      // 需要两步验证：进入第二步
+      if (res.data.needTwoFA && res.data.twoFaToken) {
+        twoFaToken.value = res.data.twoFaToken
+        twoFaStep.value = true
         loading.value = false
-        router.push({ path: '/' })
-      }, 500)
+        return
+      }
+      finishLogin(res.data)
     }
     else {
       loading.value = false
@@ -104,6 +119,27 @@ const loginPost = async () => {
     loading.value = false
     // 请检查网络或者服务器错误
     console.error('Login page init error:', error)
+  }
+}
+
+const login2faPost = async () => {
+  if (!twoFaCode.value || twoFaCode.value.length !== 6) {
+    ms.warning('请输入6位验证码')
+    return
+  }
+  loading.value = true
+  try {
+    const res = await login2fa<Login.LoginResponse>({ twoFaToken: twoFaToken.value, code: twoFaCode.value })
+    if (res.code === 0) {
+      finishLogin(res.data)
+    }
+    else {
+      loading.value = false
+    }
+  }
+  catch (error) {
+    loading.value = false
+    console.error('2FA login error:', error)
   }
 }
 
@@ -153,19 +189,29 @@ function handleChangeLanuage(value: Language) {
           {{ $t('common.appName') }}
         </NGradientText>
       </div>
-      <NForm :model="form" label-width="100px" @keydown.enter="handleSubmit">
-        <NFormItem>
-          <NInput v-model:value="form.username" :placeholder="$t('login.usernamePlaceholder')">
-            <template #prefix>
-              <SvgIcon icon="ph:user-bold" />
-            </template>
-          </NInput>
-        </NFormItem>
+      <NForm :model="form" label-width="100px" @keydown.enter="twoFaStep ? login2faPost() : handleSubmit">
+        <template v-if="!twoFaStep">
+          <NFormItem>
+            <NInput v-model:value="form.username" :placeholder="$t('login.usernamePlaceholder')">
+              <template #prefix>
+                <SvgIcon icon="ph:user-bold" />
+              </template>
+            </NInput>
+          </NFormItem>
 
-        <NFormItem>
-          <NInput v-model:value="form.password" type="password" :placeholder="$t('login.passwordPlaceholder')">
+          <NFormItem>
+            <NInput v-model:value="form.password" type="password" :placeholder="$t('login.passwordPlaceholder')">
+              <template #prefix>
+                <SvgIcon icon="mdi:password-outline" />
+              </template>
+            </NInput>
+          </NFormItem>
+        </template>
+
+        <NFormItem v-else>
+          <NInput v-model:value="twoFaCode" :maxlength="6" placeholder="请输入两步验证码(6位)">
             <template #prefix>
-              <SvgIcon icon="mdi:password-outline" />
+              <SvgIcon icon="mdi:two-factor-authentication" />
             </template>
           </NInput>
         </NFormItem>
@@ -177,8 +223,14 @@ function handleChangeLanuage(value: Language) {
           <NInput v-model:value="form.vcode" type="text" placeholder="请输入图像验证码" />
         </NFormItem> -->
         <NFormItem style="margin-top: 10px">
-          <NButton type="primary" block :loading="loading" @click="handleSubmit">
-            {{ $t('login.loginButton') }}
+          <NButton type="primary" block :loading="loading" @click="twoFaStep ? login2faPost() : handleSubmit">
+            {{ twoFaStep ? '验证' : $t('login.loginButton') }}
+          </NButton>
+        </NFormItem>
+
+        <NFormItem v-if="twoFaStep">
+          <NButton quaternary block @click="twoFaStep = false; twoFaCode = ''">
+            返回
           </NButton>
         </NFormItem>
 

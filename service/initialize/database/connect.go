@@ -129,6 +129,7 @@ func CreateDatabase(driver string, db *gorm.DB) error {
 		&models.OperationLog{},
 		&models.LoginLog{},
 		&models.Notice{},
+		&models.NoticeRead{},
 		&models.JobTask{},
 		&models.JobLog{},
 		&models.StickyNote{},

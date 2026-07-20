@@ -23,3 +23,7 @@ export function deleteNotice<T>(data: { id: number }) {
 export function getVisibleNotices<T>(data: { displayType: number[] }) {
   return post<T>({ url: '/noticeManage/getVisibleNotices', data })
 }
+
+export function markRead<T>(data: { id: number }) {
+  return post<T>({ url: '/noticeManage/markRead', data })
+}

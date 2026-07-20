@@ -8,6 +8,8 @@ declare namespace Login{
 
 	interface LoginResponse extends User.Info{
 		token :string
+		needTwoFA?: boolean
+		twoFaToken?: string
 	}
 
     interface ResetPasswordByVCodeReqest extends System.Register.SendRegisterVcodeRquest{

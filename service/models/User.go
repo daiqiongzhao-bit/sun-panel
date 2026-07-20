@@ -18,6 +18,12 @@ type User struct {
 	Token        string `gorm:"type:varchar(32)" json:"token"`
 	DepartmentId uint   `gorm:"default:0;index" json:"departmentId"`                                                                // 部门ID，0表示无部门
 
+	// 登录安全
+	LoginFailCount int   `gorm:"type:int;default:0" json:"loginFailCount"`   // 连续登录失败次数
+	LoginLockUntil int64 `gorm:"type:bigint;default:0" json:"loginLockUntil"` // 锁定截止时间(unix秒)，0=未锁定
+	TwoFAEnabled   int   `gorm:"type:tinyint(1);default:0" json:"twoFAEnabled"` // 是否启用两步验证 1=启用
+	TwoFASecret    string `gorm:"type:varchar(64)" json:"-"`                 // TOTP 密钥(不对外暴露)
+
 	Permissions  []string `gorm:"-" json:"permissions"` // 当前用户拥有的权限标识列表（运行时填充，不入库）
 	UserId uint `gorm:"-"  json:"userId"`
 }
@@ -162,3 +168,28 @@ func (m *User) CheckUsernameExist(username string) (User, error) {
 // 		return &mUser
 // 	}
 // }
+
+// UpdateTwoFA 更新两步验证状态与密钥
+func (m *User) UpdateTwoFA(userId uint, enabled int, secret string) error {
+	data := map[string]interface{}{"two_fa_enabled": enabled}
+	if secret != "" {
+		data["two_fa_secret"] = secret
+	}
+	return Db.Model(&User{}).Where("id=?", userId).Updates(data).Error
+}
+
+// IncrementLoginFail 登录失败计数 +1，并在达到阈值时锁定至 lockUntil
+func (m *User) IncrementLoginFail(userId uint, lockUntil int64) error {
+	return Db.Model(&User{}).Where("id=?", userId).Updates(map[string]interface{}{
+		"login_fail_count": gorm.Expr("login_fail_count + 1"),
+		"login_lock_until": lockUntil,
+	}).Error
+}
+
+// ResetLoginFail 登录成功后重置失败计数与锁定
+func (m *User) ResetLoginFail(userId uint) error {
+	return Db.Model(&User{}).Where("id=?", userId).Updates(map[string]interface{}{
+		"login_fail_count": 0,
+		"login_lock_until": 0,
+	}).Error
+}

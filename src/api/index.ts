@@ -9,6 +9,40 @@ export function login<T>(data: Login.LoginReqest) {
   })
 }
 
+// 两步验证(2FA)
+export function login2fa<T>(data: { twoFaToken: string; code: string }) {
+  return post<T>({
+    url: '/login/2fa',
+    data,
+  })
+}
+
+export function twofaStatus<T>() {
+  return post<T>({
+    url: '/twofa/status',
+  })
+}
+
+export function twofaEnable<T>() {
+  return post<T>({
+    url: '/twofa/enable',
+  })
+}
+
+export function twofaConfirm<T>(data: { code: string }) {
+  return post<T>({
+    url: '/twofa/confirm',
+    data,
+  })
+}
+
+export function twofaDisable<T>(data: { code: string }) {
+  return post<T>({
+    url: '/twofa/disable',
+    data,
+  })
+}
+
 export function logout<T>() {
   return post<T>({
     url: '/logout',

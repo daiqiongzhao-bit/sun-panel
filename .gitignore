@@ -41,4 +41,6 @@ service/lang
 service/database
 service/web
 service/uploads
-service/plugins
+service/plugins.env
+dist/
+node_modules/

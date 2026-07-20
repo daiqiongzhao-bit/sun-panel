@@ -190,3 +190,27 @@ func (a *NoticeManageApi) GetVisibleNotices(c *gin.Context) {
 
 	apiReturn.SuccessListData(c, list, 0)
 }
+
+// MarkRead 标记当前用户已读某公告（服务端持久化，跨设备同步）
+func (a *NoticeManageApi) MarkRead(c *gin.Context) {
+	type Request struct {
+		Id uint `json:"id"`
+	}
+	req := Request{}
+	if err := c.ShouldBindBodyWith(&req, binding.JSON); err != nil {
+		apiReturn.ErrorParamFomat(c, err.Error())
+		return
+	}
+	if req.Id == 0 {
+		apiReturn.ErrorParamFomat(c, "id is required")
+		return
+	}
+
+	userInfo, _ := base.GetCurrentUserInfo(c)
+	mRead := models.NoticeRead{}
+	if err := mRead.MarkRead(userInfo.ID, req.Id); err != nil {
+		apiReturn.ErrorDatabase(c, err.Error())
+		return
+	}
+	apiReturn.Success(c)
+}

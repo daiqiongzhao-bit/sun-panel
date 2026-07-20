@@ -3,6 +3,7 @@ import { computed, defineEmits, defineProps, onMounted, ref, watch } from 'vue'
 import type { FormInst, FormRules, SelectOption } from 'naive-ui'
 import { NButton, NForm, NFormItem, NInput, NSelect, useMessage } from 'naive-ui'
 import { edit as userManageEdit } from '@/api/panel/users'
+import { twofaStatus, twofaEnable, twofaConfirm, twofaDisable } from '@/api'
 import { getDepartmentList } from '@/api/system/department'
 import { getRoleList } from '@/api/system/role'
 import { RoundCardModal } from '@/components/common'
@@ -123,6 +124,7 @@ watch(show, (newValue, oldValue) => {
     model.value = { ...formInitValue, ...props.userInfo } as User.Info
   else
     model.value = { ...formInitValue }
+  loadTwoFAStatus()
 })
 
 const add = async () => {
@@ -144,9 +146,87 @@ const handleValidateButtonClick = (e: MouseEvent) => {
   })
 }
 
+// ---- 两步验证(2FA)管理（作用于当前登录账号）----
+const twofaEnabled = ref(false)
+const twofaOtpauth = ref('')
+const twofaSecret = ref('')
+const twofaCode = ref('')
+const twofaBusy = ref(false)
+
+async function loadTwoFAStatus() {
+  try {
+    const res = await twofaStatus<Common.Response<any>>()
+    if (res.code === 0)
+      twofaEnabled.value = !!res.data.enabled
+  }
+  catch { /* ignore */ }
+}
+
+async function enableTwoFA() {
+  twofaBusy.value = true
+  try {
+    const res = await twofaEnable<Common.Response<any>>()
+    if (res.code === 0) {
+      twofaOtpauth.value = res.data.otpauth
+      twofaSecret.value = res.data.secret
+      message.info('请使用身份验证器扫描二维码，或手动输入下方密钥')
+    }
+  }
+  finally {
+    twofaBusy.value = false
+  }
+}
+
+async function confirmTwoFA() {
+  if (!twofaCode.value || twofaCode.value.length !== 6) {
+    message.warning('请输入6位验证码')
+    return
+  }
+  twofaBusy.value = true
+  try {
+    const res = await twofaConfirm<Common.Response<any>>({ code: twofaCode.value })
+    if (res.code === 0) {
+      twofaEnabled.value = true
+      twofaOtpauth.value = ''
+      twofaSecret.value = ''
+      twofaCode.value = ''
+      message.success('两步验证已启用')
+    }
+    else if (res.code !== -1) {
+      message.warning(res.msg || '验证码错误')
+    }
+  }
+  finally {
+    twofaBusy.value = false
+  }
+}
+
+async function disableTwoFA() {
+  if (!twofaCode.value || twofaCode.value.length !== 6) {
+    message.warning('请输入6位验证码')
+    return
+  }
+  twofaBusy.value = true
+  try {
+    const res = await twofaDisable<Common.Response<any>>({ code: twofaCode.value })
+    if (res.code === 0) {
+      twofaEnabled.value = false
+      twofaCode.value = ''
+      message.success('两步验证已关闭')
+    }
+    else if (res.code !== -1) {
+      message.warning(res.msg || '验证码错误')
+    }
+  }
+  finally {
+    twofaBusy.value = false
+  }
+}
+
 onMounted(() => {
   loadDepartments()
   loadRoles()
+  loadTwoFAStatus()
 })
 </script>
 
@@ -177,6 +257,25 @@ onMounted(() => {
 
       <NFormItem path="password" :label="$t('common.password')">
         <NInput v-model:value="model.password" :maxlength="20" type="password" :placeholder="`${userInfo?.id ? $t('adminSettingUsers.EditpasswordPlaceholder') : $t('adminSettingUsers.passwordPlaceholder')}`" />
+      </NFormItem>
+
+      <NFormItem label="两步验证(2FA)">
+        <div class="w-full">
+          <div class="text-sm">
+            <span v-if="!twofaEnabled" class="text-slate-500">当前登录账号未启用。启用后登录需输入动态验证码。</span>
+            <span v-else class="text-green-600">当前登录账号已启用两步验证。</span>
+            <NButton v-if="!twofaEnabled && !twofaSecret" size="small" type="primary" class="ml-2" :loading="twofaBusy" @click="enableTwoFA">获取密钥</NButton>
+          </div>
+          <div v-if="twofaSecret" class="mt-2 p-2 bg-slate-100 rounded text-xs break-all">
+            <div>密钥(手动输入): <b>{{ twofaSecret }}</b></div>
+            <div class="mt-1">或复制链接到身份验证器: <span class="break-all">{{ twofaOtpauth }}</span></div>
+          </div>
+          <div v-if="twofaSecret || twofaEnabled" class="mt-2 flex items-center gap-2">
+            <NInput v-model:value="twofaCode" :maxlength="6" placeholder="6位验证码" />
+            <NButton v-if="twofaSecret" size="small" type="success" :loading="twofaBusy" @click="confirmTwoFA">确认启用</NButton>
+            <NButton v-if="twofaEnabled" size="small" type="warning" :loading="twofaBusy" @click="disableTwoFA">关闭</NButton>
+          </div>
+        </div>
       </NFormItem>
     </NForm>
 

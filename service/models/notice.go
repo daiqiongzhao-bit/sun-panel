@@ -64,11 +64,11 @@ func (m *Notice) GetVisibleNotices(userId uint, displayTypes ...int) ([]Notice, 
 	if len(displayTypes) == 0 {
 		displayTypes = []int{NOTICE_DISPLAY_TYPE_HOME}
 	}
-	// 公告全员可见 + 站内信匹配目标用户
-	err := Db.Where("(notice_type=? OR (notice_type=? AND (target_user_ids='' OR target_user_ids LIKE ?))) AND display_type IN ? AND status=?",
+	// 公告全员可见 + 站内信匹配目标用户；排除当前用户已读(oneRead=1)的公告
+	err := Db.Where("(notice_type=? OR (notice_type=? AND (target_user_ids='' OR target_user_ids LIKE ?))) AND display_type IN ? AND status=? AND (one_read=0 OR id NOT IN (SELECT notice_id FROM notice_read WHERE user_id=?))",
 		NOTICE_TYPE_ANNOUNCEMENT, NOTICE_TYPE_MESSAGE,
 		"%,"+fmt.Sprintf("%d", userId)+",%",
-		displayTypes, NOTICE_STATUS_ENABLED,
+		displayTypes, NOTICE_STATUS_ENABLED, userId,
 	).Order("id desc").Find(&list).Error
 	return list, err
 }

@@ -222,6 +222,18 @@ func (a *ItemIcon) GetSiteFavicon(c *gin.Context) {
 		return
 	}
 	resp := panelApiStructs.ItemIconGetSiteFaviconResp{}
+	// 本地缓存：同一主机已获取过且文件仍在，则直接复用，不再访问外网（减少依赖、加速）
+	if hu, herr := url.Parse(req.Url); herr == nil && hu.Host != "" {
+		var cached models.File
+		if global.Db.Where("category=? AND file_name=? AND user_id=?", "icon", hu.Host, userInfo.ID).First(&cached).Error == nil && cached.Src != "" {
+			cfg := global.Config.GetValueString("base", "source_path")
+			if cmn.PathExists(cfg + cached.Src) {
+				resp.IconUrl = cached.Src
+				apiReturn.SuccessData(c, resp)
+				return
+			}
+		}
+	}
 	fullUrl := ""
 	if iconUrl, err := siteFavicon.GetOneFaviconURL(req.Url); err != nil {
 		// 兜底：目标站点未提供 favicon 时，使用公共 favicon 服务
