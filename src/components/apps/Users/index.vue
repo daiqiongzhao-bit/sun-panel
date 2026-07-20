@@ -4,7 +4,7 @@ import { NAlert, NButton, NDataTable, NDropdown, NTag, useDialog, useMessage } f
 import type { DataTableColumns, PaginationProps } from 'naive-ui'
 import EditUser from './EditUser/index.vue'
 import { getPublicVisitUser, setPublicVisitUser, deletes as usersDeletes, getList as usersGetList } from '@/api/panel/users'
-import { getDepartmentList } from '@/api/system/department'
+import { getDepartmentList, getDepartmentTree } from '@/api/system/department'
 import { getRoleList } from '@/api/system/role'
 import { SvgIcon } from '@/components/common'
 import { useAuthStore } from '@/store'
@@ -24,7 +24,7 @@ const roleMap = ref<Record<number, string>>({})
 
 async function loadRoleMap() {
   try {
-    const { data } = await getRoleList<Common.ListResponse<any>>({ pageNum: 1, pageSize: 100 })
+    const { data } = await getRoleList<Common.ListResponse<any>>({ pageNum: 1, pageSize: 1000 })
     if (data && data.list) {
       data.list.forEach((role: any) => {
         roleMap.value[role.id] = role.name
@@ -33,13 +33,25 @@ async function loadRoleMap() {
   } catch { /* ignore */ }
 }
 
+// 递归遍历部门树，构建完整的 ID→名称 映射
+function buildDepartmentMap(nodes: any[], map: Record<number, string>) {
+  if (!nodes || !Array.isArray(nodes)) return
+  for (const node of nodes) {
+    if (node.id && node.name) {
+      map[node.id] = node.name
+    }
+    if (node.children && node.children.length > 0) {
+      buildDepartmentMap(node.children, map)
+    }
+  }
+}
+
 async function loadDepartmentMap() {
   try {
-    const { data } = await getDepartmentList<Common.Response<Department.Info[]>>()
+    // 使用树形接口获取完整部门结构（包含子部门）
+    const { data } = await getDepartmentTree<Common.Response<any[]>>()
     if (data && Array.isArray(data)) {
-      data.forEach((dept: any) => {
-        departmentMap.value[dept.id] = dept.name
-      })
+      buildDepartmentMap(data, departmentMap.value)
     }
   } catch { /* ignore */ }
 }

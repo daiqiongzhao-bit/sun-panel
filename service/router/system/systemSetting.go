@@ -18,12 +18,12 @@ func InitSystemSettingRouter(router *gin.RouterGroup) {
 		rPublic.POST("/systemSetting/background/preset", api.GetPresetBackgrounds)
 	}
 
-	// 管理端读写（需要管理员权限）
-	r := router.Group("", middleware.LoginInterceptor, middleware.AdminInterceptor)
+	// 管理端读写（按细粒度权限校验）
+	r := router.Group("", middleware.LoginInterceptor)
 	{
-		r.POST("/systemSetting/logo/set", api.SetLogoConfig)
-		r.POST("/systemSetting/logo/upload", api.UploadLogo)
-		r.POST("/systemSetting/background/set", api.SetBackgroundConfig)
-		r.POST("/systemSetting/background/upload", api.UploadBackground)
+		r.POST("/systemSetting/logo/set", middleware.PermissionInterceptor("setting:edit"), api.SetLogoConfig)
+		r.POST("/systemSetting/logo/upload", middleware.PermissionInterceptor("setting:edit"), api.UploadLogo)
+		r.POST("/systemSetting/background/set", middleware.PermissionInterceptor("setting:edit"), api.SetBackgroundConfig)
+		r.POST("/systemSetting/background/upload", middleware.PermissionInterceptor("setting:edit"), api.UploadBackground)
 	}
 }

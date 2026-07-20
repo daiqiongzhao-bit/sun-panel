@@ -337,7 +337,7 @@ onMounted(() => {
         @keyup.enter="handleSearch"
       />
       <NButton type="primary" size="small" @click="handleSearch">
-        {{ t('common.verify') }}
+        {{ t('common.search') }}
       </NButton>
       <NButton type="primary" size="small" ghost @click="handleAdd">
         {{ t('apps.jobManage.addJob') }}

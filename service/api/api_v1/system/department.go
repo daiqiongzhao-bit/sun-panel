@@ -3,6 +3,8 @@ package system
 import (
 	"sun-panel/api/api_v1/common/apiReturn"
 	"sun-panel/api/api_v1/common/base"
+	"sun-panel/global"
+	"sun-panel/lib/department"
 	"sun-panel/models"
 
 	"github.com/gin-gonic/gin"
@@ -12,9 +14,19 @@ import (
 type DepartmentApi struct{}
 
 func (a *DepartmentApi) GetList(c *gin.Context) {
+	userInfo, _ := base.GetCurrentUserInfo(c)
 	mDepartment := models.Department{}
-	list, err := mDepartment.GetList()
-	if err != nil {
+	query := global.Db.Model(&mDepartment)
+
+	// 数据隔离：非超级管理员仅能查看可见部门（部门管理员=本部+子部门，普通用户=本部）
+	if userInfo.Role != department.ROLE_SUPER_ADMIN {
+		if deptIds, _ := department.GetUserVisibleDepartmentIds(userInfo); deptIds != nil {
+			query = query.Where("id IN ?", deptIds)
+		}
+	}
+
+	list := []models.Department{}
+	if err := query.Find(&list).Error; err != nil {
 		apiReturn.ErrorDatabase(c, err.Error())
 		return
 	}

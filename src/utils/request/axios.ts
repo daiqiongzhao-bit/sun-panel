@@ -9,7 +9,7 @@ service.interceptors.request.use(
   (config) => {
     const token = useAuthStore().token
     if (token)
-      config.headers.Authorization = `Bearer ${token}`
+      config.headers.token = `${token}`
     return config
   },
   (error) => {

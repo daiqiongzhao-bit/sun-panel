@@ -1,11 +1,42 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { NButton, NInput, NPopconfirm, NSwitch, useMessage } from 'naive-ui'
 import { SvgIcon } from '@/components/common'
 import { t } from '@/locales'
 import { getStickyNoteList, createStickyNote, updateStickyNote, deleteStickyNote } from '@/api/panel/stickyNote'
 
 const ms = useMessage()
+
+// 便签全局配置（从 localStorage 读取）
+const STICKY_NOTE_STORAGE_KEY = 'sun-panel-sticky-note-config'
+interface StickyNoteGlobalConfig {
+  enabled: boolean
+  transparent: boolean
+}
+const globalConfig = reactive<StickyNoteGlobalConfig>({
+  enabled: true,
+  transparent: false,
+})
+
+function loadGlobalConfig() {
+  try {
+    const saved = localStorage.getItem(STICKY_NOTE_STORAGE_KEY)
+    if (saved) {
+      const cfg = JSON.parse(saved)
+      globalConfig.enabled = cfg.enabled !== false
+      globalConfig.transparent = !!cfg.transparent
+    }
+  } catch { /* ignore */ }
+}
+loadGlobalConfig()
+
+// 监听系统设置页的配置变更
+function onConfigChanged() {
+  loadGlobalConfig()
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('sticky-note-config-changed', onConfigChanged)
+}
 
 const PRESET_COLORS = [
   '#fff3bf',
@@ -300,22 +331,27 @@ onUnmounted(() => {
   for (const key in debounceTimers) {
     if (debounceTimers[key]) clearTimeout(debounceTimers[key])
   }
+  // 清理配置变更监听
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('sticky-note-config-changed', onConfigChanged)
+  }
 })
 </script>
 
 <template>
-  <div class="sticky-notes-container">
+  <div v-if="globalConfig.enabled" class="sticky-notes-container">
     <div
       v-for="note in notes"
       :key="note.id"
       class="sticky-note-card"
+      :class="{ 'sticky-transparent': globalConfig.transparent }"
       :style="{
         left: `${note.posX}px`,
         top: `${note.posY}px`,
         width: `${note.width}px`,
         height: `${note.height}px`,
         zIndex: note.zIndex,
-        backgroundColor: note.color,
+        ...(globalConfig.transparent ? {} : { backgroundColor: note.color }),
       }"
       @mousedown="onNoteMouseDown($event, note)"
     >
@@ -408,6 +444,22 @@ onUnmounted(() => {
   user-select: none;
   backdrop-filter: blur(2px);
   transition: box-shadow 0.2s;
+}
+
+/* 透明模式 */
+.sticky-note-card.sticky-transparent {
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08) !important;
+  backdrop-filter: blur(12px) saturate(1.5);
+  background-color: rgba(255, 255, 255, 0.55) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.sticky-note-card.sticky-transparent:hover {
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12) !important;
+  background-color: rgba(255, 255, 255, 0.7) !important;
+}
+.sticky-note-card.sticky-transparent .sticky-note-header,
+.sticky-note-card.sticky-transparent .sticky-note-body {
+  opacity: 0.9;
 }
 
 .sticky-note-card:hover {

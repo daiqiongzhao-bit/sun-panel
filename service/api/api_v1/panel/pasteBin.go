@@ -284,9 +284,24 @@ func (a *PasteBinApi) DownloadFile(c *gin.Context) {
 
 // GetAccessUrl 获取访问URL（供前端生成链接/二维码）
 func (a *PasteBinApi) GetAccessUrl(c *gin.Context) {
+	// 优先从系统设置获取站点地址
 	siteUrl, _ := global.SystemSetting.GetValueString("system")
 	if siteUrl == "" {
-		siteUrl = "http://localhost:3030"
+		// 根据请求头自动推断实际访问地址
+		scheme := "http"
+		if c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https" {
+			scheme = "https"
+		}
+		// 优先使用 X-Forwarded-Host（反代场景），其次用 Host 头
+		host := c.GetHeader("X-Forwarded-Host")
+		if host == "" {
+			host = c.Request.Host
+		}
+		if host != "" {
+			siteUrl = fmt.Sprintf("%s://%s", scheme, host)
+		} else {
+			siteUrl = "http://localhost:3030"
+		}
 	}
 	type Request struct {
 		Code string `json:"code" validate:"required"`

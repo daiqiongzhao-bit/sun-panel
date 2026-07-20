@@ -18,11 +18,11 @@ const loading = ref(false)
 const languageValue = ref<Language>(appStore.language)
 
 // 背景图配置
-const bgImageUrl = ref('/assets/defaultBackground.webp')
+const bgImageUrl = ref('/defaultBackground.webp')
 const bgDisplayMode = ref('cover')
 
 // Logo配置
-const logoUrl = ref('/assets/logo.png')
+const logoUrl = ref('/logo.png')
 const logoSize = ref(80)
 const logoError = ref(false)
 
@@ -61,8 +61,9 @@ async function loadLoginConfig() {
 }
 
 function onLogoError() {
-  logoError.value = true
-  logoUrl.value = '/assets/logo.png'
+  // Fallback to built-in default logo; reset error flag so <img> re-renders with new src
+  logoUrl.value = '/logo.png'
+  setTimeout(() => { logoError.value = false }, 0)
 }
 
 // 背景图预加载状态

@@ -16,6 +16,8 @@ type UserApi struct{}
 
 func (a *UserApi) GetInfo(c *gin.Context) {
 	userInfo, _ := base.GetCurrentUserInfo(c)
+	mRolePermission := models.RolePermission{}
+	perms, _ := mRolePermission.GetPermissionIdStringsByRoleId(userInfo.Role)
 	apiReturn.SuccessData(c, gin.H{
 		"userId":       userInfo.ID,
 		"id":           userInfo.ID,
@@ -23,6 +25,7 @@ func (a *UserApi) GetInfo(c *gin.Context) {
 		"name":         userInfo.Name,
 		"role":         userInfo.Role,
 		"departmentId": userInfo.DepartmentId,
+		"permissions":  perms,
 		// "token":     userInfo.Token,
 
 	})
@@ -31,6 +34,8 @@ func (a *UserApi) GetInfo(c *gin.Context) {
 func (a *UserApi) GetAuthInfo(c *gin.Context) {
 	userInfo, _ := base.GetCurrentUserInfo(c)
 	visitMode := base.GetCurrentVisitMode(c)
+	mRolePermission := models.RolePermission{}
+	perms, _ := mRolePermission.GetPermissionIdStringsByRoleId(userInfo.Role)
 	user := models.User{}
 	user.ID = userInfo.ID
 	user.HeadImage = userInfo.HeadImage
@@ -38,6 +43,7 @@ func (a *UserApi) GetAuthInfo(c *gin.Context) {
 	user.Role = userInfo.Role
 	user.Username = userInfo.Username
 	user.DepartmentId = userInfo.DepartmentId
+	user.Permissions = perms
 	apiReturn.SuccessData(c, gin.H{
 		"user":      user,
 		"visitMode": visitMode,

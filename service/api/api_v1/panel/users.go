@@ -9,6 +9,7 @@ import (
 	"sun-panel/global"
 	"sun-panel/lib/cmn"
 	"sun-panel/lib/cmn/systemSetting"
+	"sun-panel/lib/department"
 	"sun-panel/models"
 
 	"github.com/gin-gonic/gin"
@@ -213,6 +214,14 @@ func (a UsersApi) GetList(c *gin.Context) {
 		count int64
 	)
 	db := global.Db
+
+	// 数据隔离：非超级管理员仅能查看可见部门内的用户（部门管理员=本部+子部门，普通用户=本部）
+	userInfo, _ := base.GetCurrentUserInfo(c)
+	if userInfo.Role != department.ROLE_SUPER_ADMIN {
+		if deptIds, _ := department.GetUserVisibleDepartmentIds(userInfo); deptIds != nil {
+			db = db.Where("department_id IN ?", deptIds)
+		}
+	}
 
 	// 查询条件
 	if param.Keyword != "" {

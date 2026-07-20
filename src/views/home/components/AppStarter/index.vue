@@ -10,6 +10,7 @@ interface App {
   componentName: string
   icon: string
   auth?: number
+  perm?: string
 }
 const props = defineProps<{
   visible: boolean
@@ -37,27 +38,32 @@ const apps = ref<App[]>([
     name: t('apps.baseSettings.appName'),
     componentName: 'Style',
     icon: 'ion-color-palette-outline',
+    perm: 'setting:view',
   },
   {
     name: t('apps.itemGroupManage.appName'),
     componentName: 'ItemGroupManage',
     icon: 'material-symbols-ad-group-outline-rounded',
+    perm: 'group:view',
   },
   {
     name: t('apps.uploadsFileManager.appName'),
     componentName: 'UploadFileManager',
     icon: 'tabler:file-upload',
+    perm: 'file:view',
   },
   {
     name: t('apps.exportImport.appName'),
     componentName: 'ImportExport',
     icon: 'icon-park-outline-import-and-export',
+    perm: 'import_export:export',
   },
   {
     name: t('apps.pasteBin.appName'),
     componentName: 'PasteBin',
     icon: 'mdi:share-variant-outline',
     auth: 0,
+    perm: 'paste:view',
   },
 ])
 
@@ -98,54 +104,63 @@ const adminApps: App[] = [
     componentName: 'Users',
     icon: 'lucide-users',
     auth: 1,
+    perm: 'user:view',
   },
   {
     name: t('admin.setting.rolePermission'),
     componentName: 'RolePermission',
     icon: 'majesticons-applications',
     auth: 1,
+    perm: 'role:view',
   },
   {
     name: t('admin.setting.department.label'),
     componentName: 'Department',
     icon: 'material-symbols-lan-outline-rounded',
     auth: 1,
+    perm: 'department:view',
   },
   {
     name: t('admin.setting.system'),
     componentName: 'SystemSetting',
     icon: 'ri-settings-4-line',
     auth: 1,
+    perm: 'setting:view',
   },
   {
     name: t('admin.setting.backup.label'),
     componentName: 'Backup',
     icon: 'clarity-hard-disk-solid',
     auth: 1,
+    perm: 'backup:view',
   },
   {
     name: t('admin.setting.noticeManage'),
     componentName: 'NoticeManage',
     icon: 'mdi-information-box-outline',
     auth: 1,
+    perm: 'notice:view',
   },
   {
     name: t('admin.setting.operationLog'),
     componentName: 'OperationLog',
     icon: 'material-symbols-memory-alt-rounded',
     auth: 1,
+    perm: 'operation_log:view',
   },
   {
     name: t('admin.setting.loginLog'),
     componentName: 'LoginLog',
     icon: 'mdi-password-outline',
     auth: 1,
+    perm: 'login_log:view',
   },
   {
     name: t('admin.setting.jobManage'),
     componentName: 'JobManage',
     icon: 'mdi:clock-outline',
     auth: 1,
+    perm: 'task:view',
   },
   {
     name: t('apps.about.appName'),
@@ -154,10 +169,18 @@ const adminApps: App[] = [
   },
 ]
 
-const allApps = computed<App[]>(() => {
+// 判断是否拥有某权限项（超级管理员恒为 true）
+function hasPerm(perm?: string): boolean {
   if (authStore.userInfo?.role === 1)
-    return [...apps.value, ...adminApps]
-  return apps.value
+    return true
+  if (!perm)
+    return true
+  const perms: string[] = authStore.userInfo?.permissions || []
+  return perms.includes(perm)
+}
+
+const allApps = computed<App[]>(() => {
+  return [...apps.value, ...adminApps].filter((a) => hasPerm(a.perm))
 })
 
 onMounted(() => {

@@ -6,7 +6,7 @@ import { t } from '@/locales'
 
 const message = useMessage()
 
-const activeTab = ref<'logo' | 'background'>('logo')
+const activeTab = ref<'logo' | 'background' | 'stickyNote'>('logo')
 
 const logoConfig = reactive({
   imageUrl: '/assets/logo.png',
@@ -20,6 +20,17 @@ const backgroundConfig = reactive({
   displayMode: 'cover',
   useCustomUrl: false,
   customUrl: '',
+})
+
+// 便签配置（localStorage 存储）
+const STICKY_NOTE_STORAGE_KEY = 'sun-panel-sticky-note-config'
+interface StickyNoteConfig {
+  enabled: boolean
+  transparent: boolean
+}
+const stickyNoteConfig = reactive<StickyNoteConfig>({
+  enabled: true,
+  transparent: false,
 })
 
 const presetBackgrounds = ref<any[]>([])
@@ -60,6 +71,27 @@ async function loadPresetBackgrounds() {
   }
 }
 
+function loadStickyNoteConfig() {
+  try {
+    const saved = localStorage.getItem(STICKY_NOTE_STORAGE_KEY)
+    if (saved) {
+      const cfg = JSON.parse(saved)
+      stickyNoteConfig.enabled = cfg.enabled !== false // 默认启用
+      stickyNoteConfig.transparent = !!cfg.transparent
+    }
+  } catch { /* ignore */ }
+}
+
+function saveStickyNoteConfig() {
+  localStorage.setItem(STICKY_NOTE_STORAGE_KEY, JSON.stringify({
+    enabled: stickyNoteConfig.enabled,
+    transparent: stickyNoteConfig.transparent,
+  }))
+  // 触发 storage 事件让 StickyNotes 组件响应（同页面通过 custom event）
+  window.dispatchEvent(new CustomEvent('sticky-note-config-changed'))
+  message.success(t('common.success'))
+}
+
 async function handleSaveLogo() {
   const result = await setLogoConfig({
     imageUrl: logoConfig.imageUrl,
@@ -96,6 +128,8 @@ async function handleLogoUpload(e: any) {
     logoConfig.imageUrl = result.data.imageUrl
     logoConfig.useCDN = false
     message.success(t('common.uploadSuccess'))
+    // 上传后自动保存配置，避免用户忘记点保存按钮
+    await handleSaveLogo()
   }
 }
 
@@ -123,6 +157,7 @@ onMounted(() => {
   loadLogoConfig()
   loadBackgroundConfig()
   loadPresetBackgrounds()
+  loadStickyNoteConfig()
 })
 </script>
 
@@ -134,6 +169,9 @@ onMounted(() => {
       </NButton>
       <NButton :type="activeTab === 'background' ? 'primary' : 'default'" @click="activeTab = 'background'">
         {{ $t('admin.setting.background') }}（登录页背景）
+      </NButton>
+      <NButton :type="activeTab === 'stickyNote' ? 'primary' : 'default'" @click="activeTab = 'stickyNote'">
+        便签
       </NButton>
     </div>
 
@@ -279,6 +317,43 @@ onMounted(() => {
             }"
             @click="selectPresetBackground(preset)"
           />
+        </div>
+      </NCard>
+    </div>
+
+    <!-- 便签设置 -->
+    <div v-if="activeTab === 'stickyNote'">
+      <NCard title="便签设置" class="h-full">
+        <div class="space-y-5">
+          <div class="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg">
+            <span class="text-sm text-amber-700 dark:text-amber-300">
+              便签功能可在主页上显示可拖拽的便利贴。关闭后主页将不再显示便签组件和悬浮按钮。
+            </span>
+          </div>
+
+          <div class="flex items-center justify-between py-2">
+            <div>
+              <div class="font-medium">启用便签</div>
+              <div class="text-xs text-gray-500 mt-0.5">关闭后便签将完全隐藏（已有便签数据保留）</div>
+            </div>
+            <NSwitch v-model:value="stickyNoteConfig.enabled" @update:value="saveStickyNoteConfig" />
+          </div>
+
+          <div class="flex items-center justify-between py-2">
+            <div>
+              <div class="font-medium">透明模式</div>
+              <div class="text-xs text-gray-500 mt-0.5">开启后便签卡片呈现毛玻璃半透明效果</div>
+            </div>
+            <NSwitch
+              :disabled="!stickyNoteConfig.enabled"
+              v-model:value="stickyNoteConfig.transparent"
+              @update:value="saveStickyNoteConfig"
+            />
+          </div>
+
+          <div v-if="!stickyNoteConfig.enabled" class="mt-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg text-sm text-red-600 dark:text-red-400">
+            便签已关闭。如需重新启用，请打开上方开关。
+          </div>
         </div>
       </NCard>
     </div>
