@@ -434,49 +434,61 @@ onUnmounted(() => {
 
 .sticky-note-card {
   position: absolute;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+  border-radius: 14px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   pointer-events: auto;
   cursor: move;
   user-select: none;
-  backdrop-filter: blur(2px);
-  transition: box-shadow 0.2s;
+  backdrop-filter: blur(3px);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.sticky-note-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 10px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 100%);
+  pointer-events: none;
+  z-index: 1;
 }
 
 /* 透明模式 */
 .sticky-note-card.sticky-transparent {
-  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08) !important;
-  backdrop-filter: blur(12px) saturate(1.5);
-  background-color: rgba(255, 255, 255, 0.55) !important;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1) !important;
+  backdrop-filter: blur(16px) saturate(1.8);
+  background-color: rgba(255, 255, 255, 0.58) !important;
+  border: 1px solid rgba(255, 255, 255, 0.45);
 }
 .sticky-note-card.sticky-transparent:hover {
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12) !important;
-  background-color: rgba(255, 255, 255, 0.7) !important;
-}
-.sticky-note-card.sticky-transparent .sticky-note-header,
-.sticky-note-card.sticky-transparent .sticky-note-body {
-  opacity: 0.9;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.16) !important;
+  background-color: rgba(255, 255, 255, 0.72) !important;
 }
 
 .sticky-note-card:hover {
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
+  transform: translateY(-2px);
 }
 
 .sticky-note-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 6px 2px 6px;
+  padding: 6px 8px 4px 8px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 2;
 }
 
 .sticky-colors {
   display: flex;
-  gap: 4px;
+  gap: 5px;
   align-items: center;
 }
 
@@ -487,12 +499,13 @@ onUnmounted(() => {
 }
 
 .sticky-color-dot {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   cursor: pointer;
-  border: 1px solid rgba(0, 0, 0, 0.15);
-  transition: transform 0.15s, box-shadow 0.15s;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+  box-shadow: inset 0 1px 2px rgba(255,255,255,0.6), 0 1px 2px rgba(0,0,0,0.08);
 }
 .sticky-color-dot:nth-child(9) {
   border: 2px dashed rgba(0,0,0,0.2);
@@ -500,12 +513,13 @@ onUnmounted(() => {
 }
 
 .sticky-color-dot:hover {
-  transform: scale(1.3);
+  transform: scale(1.35);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.08);
 }
 
 .sticky-color-dot.active {
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.25);
-  transform: scale(1.2);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.3);
+  transform: scale(1.25);
 }
 
 .sticky-btn {
@@ -513,48 +527,67 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
-  transition: background-color 0.15s, opacity 0.15s;
+  transition: background-color 0.15s, opacity 0.15s, transform 0.15s;
+  opacity: 0.75;
+}
+
+.sticky-btn:hover {
+  opacity: 1;
+  transform: scale(1.1);
 }
 
 .sticky-status-btn:hover {
-  background-color: rgba(0, 0, 0, 0.1);
+  background-color: rgba(0, 0, 0, 0.08);
+  color: #2b7de1;
 }
 
 .sticky-delete-btn:hover {
-  background-color: rgba(231, 76, 60, 0.15);
+  background-color: rgba(231, 76, 60, 0.12);
 }
 
 .sticky-note-body {
   flex: 1;
   overflow: hidden;
-  padding: 0 6px 2px 6px;
+  padding: 0 8px 4px 8px;
+  position: relative;
+  z-index: 2;
 }
 
 .sticky-textarea {
   width: 100%;
   height: 100%;
   background-color: transparent !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
 }
 
 .sticky-textarea :deep(.n-input__textarea-el) {
   background-color: transparent !important;
   box-shadow: none !important;
   resize: none;
+  color: rgba(0, 0, 0, 0.85);
+  padding: 4px 2px;
 }
 
 .sticky-resize-handle {
   position: absolute;
   right: 0;
   bottom: 0;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   cursor: nwse-resize;
-  opacity: 0.3;
-  background: linear-gradient(135deg, transparent 50%, rgba(0, 0, 0, 0.3) 50%);
-  border-radius: 0 0 8px 0;
+  opacity: 0.35;
+  background: linear-gradient(135deg, transparent 55%, rgba(0, 0, 0, 0.4) 55%);
+  border-radius: 0 0 14px 0;
+  transition: opacity 0.15s;
+}
+
+.sticky-resize-handle:hover {
+  opacity: 0.65;
 }
 
 .sticky-add-btn {
@@ -564,8 +597,17 @@ onUnmounted(() => {
   padding: 4px;
   cursor: grab;
   user-select: none;
+  filter: drop-shadow(0 4px 10px rgba(34, 197, 94, 0.35));
+  transition: transform 0.15s ease, filter 0.15s ease;
 }
+
+.sticky-add-btn:hover {
+  transform: scale(1.08);
+  filter: drop-shadow(0 6px 14px rgba(34, 197, 94, 0.45));
+}
+
 .sticky-add-btn:active {
   cursor: grabbing;
+  transform: scale(0.96);
 }
 </style>

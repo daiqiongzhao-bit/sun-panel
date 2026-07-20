@@ -17,6 +17,18 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
+var httpClient = &http.Client{
+	Timeout: 8 * time.Second,
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 5 {
+			return errors.New("too many redirects")
+		}
+		return nil
+	},
+}
+
+const chromeUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+
 func IsHTTPURL(url string) bool {
 	httpPattern := `^(http://|https://|//)`
 	match, err := regexp.MatchString(httpPattern, url)
@@ -26,82 +38,133 @@ func IsHTTPURL(url string) bool {
 	return match
 }
 
+// GetOneFaviconURL 从目标站点获取一个可用的 favicon URL。
+// 策略：先解析页面 link 标签；失败或无结果时尝试站点默认路径；最后使用多个公共 favicon 服务兜底。
 func GetOneFaviconURL(urlStr string) (string, error) {
-	iconURLs, err := getFaviconURL(urlStr)
-	if err != nil {
-		return "", err
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil || parsedURL.Host == "" {
+		return "", errors.New("invalid URL")
 	}
 
-	for _, v := range iconURLs {
-		// 标准的路径地址
-		if IsHTTPURL(v) {
-			return v, nil
-		} else {
-			urlInfo, _ := url.Parse(urlStr)
-			fullUrl := urlInfo.Scheme + "://" + urlInfo.Host + "/" + strings.TrimPrefix(v, "/")
-			return fullUrl, nil
+	iconURLs, err := getFaviconURL(urlStr)
+	if err == nil && len(iconURLs) > 0 {
+		return resolveIconURL(iconURLs[0], parsedURL), nil
+	}
+
+	// 2. 尝试常见默认路径
+	defaultPaths := []string{
+		"/favicon.ico",
+		"/favicon.png",
+		"/apple-touch-icon.png",
+		"/apple-touch-icon-precomposed.png",
+	}
+	base := parsedURL.Scheme + "://" + parsedURL.Host
+	for _, p := range defaultPaths {
+		candidate := base + p
+		if _, herr := GetRemoteFileSize(candidate); herr == nil {
+			return candidate, nil
 		}
 	}
-	return "", fmt.Errorf("not found ico")
+
+	// 3. 使用公共 favicon 服务兜底
+	host := parsedURL.Host
+	fallbacks := []string{
+		fmt.Sprintf("https://icons.duckduckgo.com/ip3/%s.ico", host),
+		fmt.Sprintf("https://www.google.com/s2/favicons?domain=%s&sz=128", host),
+		fmt.Sprintf("https://icon.horse/icon/%s", host),
+		fmt.Sprintf("https://logo.clearbit.com/%s", host),
+	}
+	for _, candidate := range fallbacks {
+		if _, ferr := GetRemoteFileSize(candidate); ferr == nil {
+			return candidate, nil
+		}
+	}
+
+	return "", fmt.Errorf("not found ico: %v", err)
 }
 
-// 获取远程文件的大小
+func resolveIconURL(iconURL string, baseURL *url.URL) string {
+	if IsHTTPURL(iconURL) {
+		return iconURL
+	}
+	if strings.HasPrefix(iconURL, "//") {
+		return baseURL.Scheme + ":" + iconURL
+	}
+	u, err := url.Parse(iconURL)
+	if err != nil {
+		return baseURL.Scheme + "://" + baseURL.Host + "/" + strings.TrimPrefix(iconURL, "/")
+	}
+	return baseURL.ResolveReference(u).String()
+}
+
+// GetRemoteFileSize 获取远程文件大小并校验可访问性
 func GetRemoteFileSize(url string) (int64, error) {
-	resp, err := http.Head(url)
+	req, err := http.NewRequest("HEAD", url, nil)
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("User-Agent", chromeUserAgent)
+	req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Referer", "https://www.google.com/")
+
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return 0, err
 	}
 	defer resp.Body.Close()
 
-	// 检查HTTP响应状态
 	if resp.StatusCode != http.StatusOK {
 		return 0, fmt.Errorf("HTTP request failed, status code: %d", resp.StatusCode)
 	}
 
-	// 获取Content-Length字段，即文件大小
-	size := resp.ContentLength
-	return size, nil
+	return resp.ContentLength, nil
 }
 
-// 下载图片
+// DownloadImage 下载图片到本地
 func DownloadImage(url, savePath string, maxSize int64) (*os.File, error) {
-	// 获取远程文件大小
 	fileSize, err := GetRemoteFileSize(url)
 	if err != nil {
 		return nil, err
 	}
 
-	// 判断文件大小是否在阈值内
 	if fileSize > maxSize {
 		return nil, fmt.Errorf("文件太大，不下载。大小：%d字节", fileSize)
 	}
 
-	// 发送HTTP GET请求获取图片数据
-	response, err := http.Get(url)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", chromeUserAgent)
+	req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
+	req.Header.Set("Referer", "https://www.google.com/")
+
+	response, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer response.Body.Close()
 
-	// 检查HTTP响应状态
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP request failed, status code: %d", response.StatusCode)
 	}
 
 	urlFileName := path.Base(url)
 	fileExt := path.Ext(url)
+	if fileExt == "" {
+		fileExt = ".ico"
+	}
 	fileName := cmn.Md5(fmt.Sprintf("%s%s", urlFileName, time.Now().String())) + fileExt
 
 	destination := savePath + "/" + fileName
 
-	// 创建本地文件用于保存图片
 	file, err := os.Create(destination)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
 
-	// 将图片数据写入本地文件
 	_, err = io.Copy(file, response.Body)
 	if err != nil {
 		return nil, err
@@ -110,42 +173,29 @@ func DownloadImage(url, savePath string, maxSize int64) (*os.File, error) {
 }
 
 func GetOneFaviconURLAndUpload(urlStr string) (string, bool) {
-	//www.iqiyipic.com/pcwimg/128-128-logo.png
-	iconURLs, err := getFaviconURL(urlStr)
-	if err != nil {
+	iconUrl, err := GetOneFaviconURL(urlStr)
+	if err != nil || iconUrl == "" {
 		return "", false
 	}
-
-	for _, v := range iconURLs {
-		// 标准的路径地址
-		if IsHTTPURL(v) {
-			return v, true
-		} else {
-			urlInfo, _ := url.Parse(urlStr)
-			fullUrl := urlInfo.Scheme + "://" + urlInfo.Host + "/" + strings.TrimPrefix(v, "/")
-			return fullUrl, true
-		}
-	}
-	return "", false
+	return iconUrl, true
 }
 
 func getFaviconURL(url string) ([]string, error) {
 	var icons []string
-	icons = make([]string, 0)
-	client := &http.Client{}
+	client := httpClient
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return icons, err
 	}
 
-	// 设置User-Agent头字段，模拟浏览器请求
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3")
+	req.Header.Set("User-Agent", chromeUserAgent)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 
 	resp, err := client.Do(req)
 	if err != nil {
 		return icons, err
 	}
-
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -157,13 +207,11 @@ func getFaviconURL(url string) ([]string, error) {
 		return icons, err
 	}
 
-	// 查找所有link标签，筛选包含rel属性为"icon"的标签
 	doc.Find("link").Each(func(i int, s *goquery.Selection) {
 		rel, _ := s.Attr("rel")
 		href, _ := s.Attr("href")
 
 		if strings.Contains(rel, "icon") && href != "" {
-			// fmt.Println(href)
 			icons = append(icons, href)
 		}
 	})
