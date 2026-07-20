@@ -97,6 +97,14 @@ const finishLogin = (data: Login.LoginResponse) => {
 }
 
 const loginPost = async () => {
+  if (!form.value.username) {
+    ms.warning('请输入用户名')
+    return
+  }
+  if (!form.value.password) {
+    ms.warning('请输入密码')
+    return
+  }
   loading.value = true
   try {
     const res = await login<Login.LoginResponse>(form.value)
@@ -112,13 +120,15 @@ const loginPost = async () => {
     }
     else {
       loading.value = false
-      // captchaRef.value.refresh()
+      // 后端返回错误时给出明确提示（原代码静默无反馈）
+      ms.error(res.msg || '登录失败，请检查用户名或密码')
     }
   }
   catch (error) {
     loading.value = false
     // 请检查网络或者服务器错误
     console.error('Login page init error:', error)
+    ms.error('网络或服务器错误，请重试')
   }
 }
 
