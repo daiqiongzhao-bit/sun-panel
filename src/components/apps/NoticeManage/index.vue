@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { h, onMounted, reactive, ref } from 'vue'
-import { NButton, NDataTable, NDropdown, NInput, NTag, useDialog, useMessage } from 'naive-ui'
+import { NButton, NDataTable, NDropdown, NInput, NSelect, NTag, useDialog, useMessage } from 'naive-ui'
 import type { DataTableColumns, PaginationProps } from 'naive-ui'
 import EditNotice from './EditNotice/index.vue'
 import { deleteNotice, getNoticeList } from '@/api/system/noticeManage'
@@ -12,6 +12,18 @@ const tableIsLoading = ref<boolean>(false)
 const editDialogShow = ref<boolean>(false)
 const editData = ref<Notice.NoticeInfo | null>(null)
 const keyWord = ref<string>('')
+const statusFilter = ref<number>(0)
+const statusOptions = [
+  { label: t('common.all'), value: 0 },
+  { label: t('apps.noticeManage.enabled'), value: 1 },
+  { label: t('apps.noticeManage.disabled'), value: 2 },
+]
+
+function rowProps(row: Notice.NoticeInfo) {
+  return {
+    class: row.status === 2 ? 'notice-row-disabled' : '',
+  }
+}
 
 const createColumns = ({
   edit,
@@ -155,6 +167,7 @@ async function getList() {
     page: pagination.page,
     pageSize: pagination.pageSize,
     keyword: keyWord.value || undefined,
+    status: statusFilter.value || undefined,
   })
   pagination.itemCount = data.count
   if (data.list)
@@ -177,6 +190,12 @@ onMounted(() => {
         style="width: 250px;"
         @keyup.enter="handleSearch"
       />
+      <NSelect
+        v-model:value="statusFilter"
+        :options="statusOptions"
+        style="width: 120px;"
+        @update:value="handleSearch"
+      />
       <NButton type="primary" size="small" @click="handleSearch">
         {{ t('common.search') }}
       </NButton>
@@ -191,7 +210,15 @@ onMounted(() => {
       :bordered="false"
       :loading="tableIsLoading"
       :remote="true"
+      :row-props="rowProps"
     />
     <EditNotice v-model:visible="editDialogShow" :edit-data="editData" @done="handleDone" />
   </div>
 </template>
+
+<style>
+.notice-row-disabled > td {
+  color: #bbb !important;
+  background-color: rgba(128, 128, 128, 0.06);
+}
+</style>

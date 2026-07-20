@@ -8,7 +8,7 @@ import { setBackgroundConfig as saveLoginBg, setLogoConfig } from '@/api/system/
 import { RoundCardModal, SvgIcon } from '@/components/common'
 import { copyToClipboard, timeFormat } from '@/utils/cmn'
 import { t } from '@/locales'
-import { usePanelState } from '@/store'
+import { useAuthStore, usePanelState } from '@/store'
 
 const FILE_CATEGORIES = [
   { label: '全部文件', value: 'all' },
@@ -25,6 +25,9 @@ const imageList = ref<File.Info[]>([])
 const ms = useMessage()
 const dialog = useDialog()
 const panelStore = usePanelState()
+const authStore = useAuthStore()
+// NUpload 走原生上传，需手动携带 token 头，否则会被登录拦截
+const uploadHeaders = computed(() => ({ token: authStore.token }))
 const loading = ref(false)
 const uploadLoading = ref(false)
 const selectedCategory = ref('all')
@@ -36,6 +39,12 @@ const infoModalState = ref<InfoModalState>({
 
 // 根据文件路径和名称判断文件类型（壁纸 vs 图标两大类）
 function getFileCategory(file: File.Info): string {
+  // 优先使用后端返回的分类（新增字段），保证与上传/一键获取时的归属一致
+  const backendCat = (file as any).category
+  if (backendCat === 'icon' || backendCat === 'wallpaper') {
+    return backendCat
+  }
+
   const src = (file.src || '').toLowerCase()
   const fileName = (file.fileName || '').toLowerCase()
   const ext = ((file as any).ext || '').toLowerCase()
@@ -93,6 +102,11 @@ const filteredImageList = computed(() => {
     return imageList.value
   return imageList.value.filter(item => getFileCategory(item) === selectedCategory.value)
 })
+
+// 上传时携带分类：一键获取固定为 icon；手动上传按当前所选分类归属（all 视图默认归壁纸）
+const uploadData = computed(() => ({
+  category: selectedCategory.value === 'all' ? 'wallpaper' : selectedCategory.value,
+}))
 
 async function handleBatchUpload(options: { file: UploadFileInfo; fileList: Array<UploadFileInfo> }) {
   if (options.file.status === 'finished') {
@@ -209,8 +223,11 @@ onMounted(() => {
     <div class="my-2">
       <NUpload
         multiple
+        name="files[]"
         accept="image/*"
-        action="/api/file/upload"
+        action="/api/file/uploadFiles"
+        :data="uploadData"
+        :headers="uploadHeaders"
         :show-file-list="false"
         @finish="getFileList"
       >

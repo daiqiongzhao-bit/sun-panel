@@ -18,6 +18,7 @@ func (a *NoticeManageApi) GetList(c *gin.Context) {
 		PageSize   int    `json:"pageSize"`
 		Keyword    string `json:"keyword"`
 		NoticeType int    `json:"noticeType"`
+		Status     int    `json:"status"`
 	}
 	req := Request{Page: 1, PageSize: 10}
 	if err := c.ShouldBindBodyWith(&req, binding.JSON); err != nil {
@@ -26,7 +27,7 @@ func (a *NoticeManageApi) GetList(c *gin.Context) {
 	}
 
 	mNotice := models.Notice{}
-	list, count, err := mNotice.GetList(req.Page, req.PageSize, req.Keyword, req.NoticeType)
+	list, count, err := mNotice.GetList(req.Page, req.PageSize, req.Keyword, req.NoticeType, req.Status)
 	if err != nil {
 		apiReturn.ErrorDatabase(c, err.Error())
 		return

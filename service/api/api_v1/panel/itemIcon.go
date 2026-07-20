@@ -224,8 +224,17 @@ func (a *ItemIcon) GetSiteFavicon(c *gin.Context) {
 	resp := panelApiStructs.ItemIconGetSiteFaviconResp{}
 	fullUrl := ""
 	if iconUrl, err := siteFavicon.GetOneFaviconURL(req.Url); err != nil {
-		apiReturn.Error(c, "acquisition failed: get ico error:"+err.Error())
-		return
+		// 兜底：目标站点未提供 favicon 时，使用公共 favicon 服务
+		if parsed, perr := url.Parse(req.Url); perr == nil && parsed.Host != "" {
+			fallback := fmt.Sprintf("https://icons.duckduckgo.com/ip3/%s.ico", parsed.Host)
+			if _, herr := siteFavicon.GetRemoteFileSize(fallback); herr == nil {
+				fullUrl = fallback
+			}
+		}
+		if fullUrl == "" {
+			apiReturn.Error(c, "acquisition failed: get ico error:"+err.Error())
+			return
+		}
 	} else {
 		fullUrl = iconUrl
 	}
@@ -280,7 +289,7 @@ func (a *ItemIcon) GetSiteFavicon(c *gin.Context) {
 	// 保存到数据库
 	ext := path.Ext(fullUrl)
 	mFile := models.File{}
-	if _, err := mFile.AddFile(userInfo.ID, parsedURL.Host, ext, imgInfo.Name()); err != nil {
+	if _, err := mFile.AddFile(userInfo.ID, parsedURL.Host, ext, imgInfo.Name(), "icon"); err != nil {
 		apiReturn.ErrorDatabase(c, err.Error())
 		return
 	}

@@ -475,38 +475,57 @@ async function handleBatchFetchIcons(itemGroupIndex: number) {
   batchFetchLoading.value = true
   let successCount = 0
   let failCount = 0
+  let skipCount = 0
 
   for (let i = 0; i < group.items.length; i++) {
     const item = group.items[i]
     // 只处理有 URL 的条目
     const url = (item.url || item.lanUrl || '').trim()
-    if (!url) continue
-    // 只跳过已有有效图片类图标(itemType=2 且 src 非空)的条目；文字图标(itemType=3)、无图标、空 src 均纳入处理
-    if (item.icon?.itemType === 2 && item.icon.src && item.icon.src.length > 0) continue
+    if (!url) { skipCount++; continue }
+    // 跳过已有有效图片类图标(itemType=2 且 src 非空)的条目
+    if (item.icon?.itemType === 2 && item.icon.src && item.icon.src.length > 0) { skipCount++; continue }
 
-    try {
-      const { code, data } = await getSiteFavicon<{ iconUrl: string }>(url)
-      if (code === 0 && data?.iconUrl) {
-        // 更新该条目的图标并保存到后端
-        const updatedItem = { ...item, icon: { itemType: 2, src: data.iconUrl } }
-        await edit<Panel.ItemInfo>(updatedItem)
-        // 更新本地数据
-        items.value[itemGroupIndex].items[i] = { ...items.value[itemGroupIndex].items[i], icon: { itemType: 2, src: data.iconUrl } }
-        successCount++
+    let ok = false
+    // 失败重试 1 次
+    for (let attempt = 0; attempt < 2 && !ok; attempt++) {
+      try {
+        const { code, data } = await getSiteFavicon<{ iconUrl: string }>(url)
+        if (code === 0 && data?.iconUrl) {
+          // 必须带上 itemIconGroupId，否则后端 Edit 会因缺少分组而报错
+          const updatedItem = {
+            ...item,
+            itemIconGroupId: (item as any).itemIconGroupId || group.id,
+            icon: { itemType: 2, src: data.iconUrl },
+          }
+          await edit<Panel.ItemInfo>(updatedItem)
+          // 更新本地数据
+          items.value[itemGroupIndex].items[i] = {
+            ...items.value[itemGroupIndex].items[i],
+            icon: { itemType: 2, src: data.iconUrl },
+          }
+          successCount++
+          ok = true
+        }
       }
-      else {
-        failCount++
+      catch {
+        // 忽略，进入重试/失败计数
       }
+      if (!ok)
+        await new Promise(resolve => setTimeout(resolve, 300))
     }
-    catch {
-      failCount++
-    }
-    // 稍微延迟避免请求过快
-    await new Promise(resolve => setTimeout(resolve, 300))
+    if (!ok) failCount++
+    // 限速，避免请求过快
+    await new Promise(resolve => setTimeout(resolve, 200))
   }
 
   batchFetchLoading.value = false
-  ms.success(`获取完成：成功 ${successCount} 个，失败 ${failCount} 个`)
+  const parts = [`成功 ${successCount} 个`]
+  if (failCount > 0) parts.push(`失败 ${failCount} 个`)
+  if (skipCount > 0) parts.push(`跳过 ${skipCount} 个`)
+  if (failCount === 0 && skipCount === 0)
+    ms.success(`获取完成：${parts.join('，')}`)
+  else
+    ms.warning(`获取完成：${parts.join('，')}`)
   // 刷新列表确保最新状态
   getList()
 }

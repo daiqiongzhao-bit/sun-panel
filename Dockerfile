@@ -46,6 +46,11 @@ WORKDIR /app
 
 COPY --from=web_image /build/dist /app/web
 
+# 预置自定义脚本/样式空桩，避免未挂载 custom 卷时 404 白屏
+RUN mkdir -p /app/web/custom && \
+    printf '// Sun-Panel custom user script (empty)\n' > /app/web/custom/index.js && \
+    printf '/* Sun-Panel custom user style (empty) */\n' > /app/web/custom/index.css
+
 COPY --from=server_image /build/sun-panel /app/sun-panel
 
 COPY --from=server_image /build/assets/conf.example.ini /app/conf-default/conf.ini

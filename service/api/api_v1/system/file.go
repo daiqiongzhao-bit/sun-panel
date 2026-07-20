@@ -54,7 +54,11 @@ func (a *FileApi) UploadImg(c *gin.Context) {
 
 		// 像数据库添加记录
 		mFile := models.File{}
-		if _, err := mFile.AddFile(userInfo.ID, f.Filename, fileExt, filepath); err != nil {
+		category := c.PostForm("category")
+		if category == "" {
+			category = "all"
+		}
+		if _, err := mFile.AddFile(userInfo.ID, f.Filename, fileExt, filepath, category); err != nil {
 			apiReturn.ErrorDatabase(c, err.Error())
 			return
 		}
@@ -74,6 +78,13 @@ func (a *FileApi) UploadFiles(c *gin.Context) {
 		return
 	}
 	files := form.File["files[]"]
+	category := ""
+	if vals, ok := form.Value["category"]; ok && len(vals) > 0 {
+		category = vals[0]
+	}
+	if category == "" {
+		category = "all"
+	}
 	errFiles := []string{}
 	succMap := map[string]string{}
 	for _, f := range files {
@@ -91,7 +102,7 @@ func (a *FileApi) UploadFiles(c *gin.Context) {
 			// 成功
 			// 像数据库添加记录
 			mFile := models.File{}
-			mFile.AddFile(userInfo.ID, f.Filename, fileExt, filepath)
+			mFile.AddFile(userInfo.ID, f.Filename, fileExt, filepath, category)
 			succMap[f.Filename] = filepath[1:]
 		}
 	}
@@ -120,6 +131,7 @@ func (a *FileApi) GetList(c *gin.Context) {
 			"createTime": v.CreatedAt,
 			"updateTime": v.UpdatedAt,
 			"path":       v.Src,
+			"category":   v.Category,
 		})
 	}
 	apiReturn.SuccessListData(c, data, count)

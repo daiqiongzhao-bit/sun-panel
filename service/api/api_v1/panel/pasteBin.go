@@ -111,11 +111,6 @@ func (a *PasteBinApi) GetByCode(c *gin.Context) {
 	// 增加访问计数
 	(&models.PasteBin{}).IncrementAccess(item.ID)
 
-	// 阅后即焚：读取后立即物理删除
-	if item.BurnAfterRead == 1 {
-		global.Db.Delete(&item)
-	}
-
 	// 不返回 userId
 	item.UserId = 0
 	apiReturn.SuccessData(c, item)
@@ -123,8 +118,11 @@ func (a *PasteBinApi) GetByCode(c *gin.Context) {
 
 func (a *PasteBinApi) GetMyList(c *gin.Context) {
 	type Request struct {
-		Page     int `json:"page"`
-		PageSize int `json:"pageSize"`
+		Page     int    `json:"page"`
+		PageSize int    `json:"pageSize"`
+		Keyword  string `json:"keyword"`
+		StartTime string `json:"startTime"` // 秒级时间戳
+		EndTime  string `json:"endTime"`   // 秒级时间戳
 	}
 	req := Request{Page: 1, PageSize: 20}
 	if err := c.ShouldBindBodyWith(&req, binding.JSON); err != nil {
@@ -133,7 +131,7 @@ func (a *PasteBinApi) GetMyList(c *gin.Context) {
 	}
 
 	userInfo, _ := base.GetCurrentUserInfo(c)
-	list, count, err := (&models.PasteBin{}).GetByUser(userInfo.ID, req.Page, req.PageSize)
+	list, count, err := (&models.PasteBin{}).GetByUser(userInfo.ID, req.Page, req.PageSize, req.Keyword, req.StartTime, req.EndTime)
 	if err != nil {
 		apiReturn.ErrorDatabase(c, err.Error())
 		return

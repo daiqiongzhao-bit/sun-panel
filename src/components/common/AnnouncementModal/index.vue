@@ -20,6 +20,10 @@ function handleMarkRead() {
 }
 
 function handleClose() {
+  // 关闭时也标记为已读，避免每次登录重复弹出
+  if (currentNotice.value?.id) {
+    noticeStore.setReadByGlobal(currentNotice.value.id)
+  }
   showModal.value = false
   currentNotice.value = null
 }

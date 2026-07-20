@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { h, onMounted, ref } from 'vue'
-import { NButton, NCheckbox, NDataTable, NInput, NInputGroup, NModal, NPopconfirm, NSelect, NTag, NUpload, useMessage } from 'naive-ui'
+import { NButton, NCheckbox, NDataTable, NDatePicker, NInput, NInputGroup, NModal, NSelect, NTag, NUpload, useMessage } from 'naive-ui'
 import type { UploadFileInfo } from 'naive-ui'
 import { t } from '@/locales'
-import { createPasteBin, updatePasteBin, getMyPasteBinList, deletePasteBin, getPasteBinAccessUrl } from '@/api/panel/pasteBin'
+import { createPasteBin, updatePasteBin, getMyPasteBinList, getPasteBinAccessUrl } from '@/api/panel/pasteBin'
 
 const ms = useMessage()
 
@@ -24,6 +24,8 @@ interface PasteBinItem {
 
 const list = ref<PasteBinItem[]>([])
 const loading = ref(false)
+const keyWord = ref('')
+const dateRange = ref<[number, number] | null>(null)
 const pagination = ref({
   page: 1,
   pageSize: 10,
@@ -80,17 +82,31 @@ const expireOptions = [
 
 function loadData() {
   loading.value = true
-  getMyPasteBinList<Common.ListResponse<PasteBinItem[]>>({
+  const params: Record<string, any> = {
     page: pagination.value.page,
     pageSize: pagination.value.pageSize,
-  }).then(({ code, data }) => {
+  }
+  if (keyWord.value)
+    params.keyword = keyWord.value
+  if (dateRange.value && dateRange.value.length === 2) {
+    params.startTime = Math.floor(dateRange.value[0] / 1000).toString()
+    params.endTime = Math.floor(dateRange.value[1] / 1000).toString()
+  }
+  getMyPasteBinList<Common.ListResponse<PasteBinItem[]>>(params).then(({ code, data }) => {
     if (code === 0) {
       list.value = data.list || []
-      pagination.value.itemCount = data.total || 0
+      pagination.value.itemCount = data.count || 0
     }
   }).finally(() => {
     loading.value = false
   })
+}
+
+function resetSearch() {
+  keyWord.value = ''
+  dateRange.value = null
+  pagination.value.page = 1
+  loadData()
 }
 
 function openCreateModal() {
@@ -195,15 +211,6 @@ async function copyAccessUrl(row: PasteBinItem) {
   catch { ms.error(t('common.failed')) }
 }
 
-function handleDelete(id: number) {
-  deletePasteBin({ id }).then(({ code }) => {
-    if (code === 0) {
-      ms.success(t('common.deleteSuccess'))
-      loadData()
-    }
-  })
-}
-
 function copyToClipboard(text: string, messageKey: string) {
   navigator.clipboard.writeText(text).then(() => {
     ms.success(t(`apps.pasteBin.${messageKey}` as any))
@@ -257,10 +264,6 @@ const columns = [
           { default: () => t('apps.pasteBin.copyUrl') }),
         h(NButton, { size: 'tiny', tertiary: true, onClick: () => openEditModal(row) },
           { default: () => t('common.edit') }),
-        h(NPopconfirm, { onPositiveClick: () => handleDelete(row.id) }, {
-          trigger: () => h(NButton, { size: 'tiny', type: 'error', tertiary: true }, { default: () => t('common.delete') }),
-          default: () => t('apps.pasteBin.deleteConfirm'),
-        }),
       ])
     },
   },
@@ -277,6 +280,28 @@ onMounted(() => {
       <h3 class="text-lg font-bold">{{ t('apps.pasteBin.appName') }}</h3>
       <NButton type="primary" @click="openCreateModal">
         {{ t('apps.pasteBin.create') }}
+      </NButton>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+      <NInput
+        v-model:value="keyWord"
+        clearable
+        placeholder="搜索标题 / 内容 / 提取码"
+        style="width: 240px;"
+        @keyup.enter="loadData"
+      />
+      <NDatePicker
+        v-model:value="dateRange"
+        type="daterange"
+        clearable
+        placeholder="按创建时间筛选"
+      />
+      <NButton type="primary" size="small" @click="loadData">
+        {{ t('common.search') }}
+      </NButton>
+      <NButton size="small" @click="resetSearch">
+        {{ t('common.reset') }}
       </NButton>
     </div>
 

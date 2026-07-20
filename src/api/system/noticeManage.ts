@@ -1,6 +1,6 @@
 import { post } from '@/utils/request'
 
-export function getNoticeList<T>(data: { page: number; pageSize: number; keyword?: string; noticeType?: number }) {
+export function getNoticeList<T>(data: { page: number; pageSize: number; keyword?: string; noticeType?: number; status?: number }) {
   return post<T>({ url: '/noticeManage/getList', data })
 }
 

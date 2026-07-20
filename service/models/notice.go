@@ -32,12 +32,15 @@ type Notice struct {
 	User        User   `json:"user"`
 }
 
-func (m *Notice) GetList(page, pageSize int, keyword string, noticeType int) ([]Notice, int64, error) {
+func (m *Notice) GetList(page, pageSize int, keyword string, noticeType int, status int) ([]Notice, int64, error) {
 	var list []Notice
 	var count int64
 	offset := (page - 1) * pageSize
 
-	db := Db.Model(m).Where("status=?", NOTICE_STATUS_ENABLED)
+	db := Db.Model(m)
+	if status > 0 {
+		db = db.Where("status=?", status)
+	}
 	if keyword != "" {
 		db = db.Where("title LIKE ?", "%"+keyword+"%")
 	}
@@ -45,7 +48,8 @@ func (m *Notice) GetList(page, pageSize int, keyword string, noticeType int) ([]
 		db = db.Where("notice_type=?", noticeType)
 	}
 
-	err := db.Count(&count).Offset(offset).Limit(pageSize).Order("id desc").Find(&list).Error
+	// 启用(1)在前，停用(2)置后，同状态按 id 倒序
+	err := db.Count(&count).Offset(offset).Limit(pageSize).Order("status asc, id desc").Find(&list).Error
 	return list, count, err
 }
 

@@ -1,6 +1,7 @@
 package models
 
 import (
+	"strconv"
 	"time"
 
 	"gorm.io/gorm"
@@ -80,11 +81,25 @@ func (m *PasteBin) GetByCode(code string) (PasteBin, error) {
 	return item, err
 }
 
-func (m *PasteBin) GetByUser(userId uint, page, pageSize int) ([]PasteBin, int64, error) {
+func (m *PasteBin) GetByUser(userId uint, page, pageSize int, keyword, startTime, endTime string) ([]PasteBin, int64, error) {
 	var list []PasteBin
 	var count int64
 	offset := (page - 1) * pageSize
 	db := Db.Model(m).Where("user_id=?", userId)
+	if keyword != "" {
+		kw := "%" + keyword + "%"
+		db = db.Where("title LIKE ? OR content LIKE ? OR code LIKE ?", kw, kw, kw)
+	}
+	if startTime != "" {
+		if ts, err := strconv.ParseInt(startTime, 10, 64); err == nil {
+			db = db.Where("created_at >= ?", time.Unix(ts, 0))
+		}
+	}
+	if endTime != "" {
+		if ts, err := strconv.ParseInt(endTime, 10, 64); err == nil {
+			db = db.Where("created_at <= ?", time.Unix(ts, 0))
+		}
+	}
 	err := db.Count(&count).Offset(offset).Limit(pageSize).Order("created_at desc").Find(&list).Error
 	return list, count, err
 }
