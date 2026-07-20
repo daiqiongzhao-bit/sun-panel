@@ -478,10 +478,11 @@ async function handleBatchFetchIcons(itemGroupIndex: number) {
 
   for (let i = 0; i < group.items.length; i++) {
     const item = group.items[i]
-    // 只处理有 URL 但没有图标或图标为空的条目
+    // 只处理有 URL 的条目
     const url = (item.url || item.lanUrl || '').trim()
     if (!url) continue
-    if (item.icon?.src && item.icon.src.length > 0) continue // 已有图标则跳过
+    // 只跳过已有有效图片类图标(itemType=2 且 src 非空)的条目；文字图标(itemType=3)、无图标、空 src 均纳入处理
+    if (item.icon?.itemType === 2 && item.icon.src && item.icon.src.length > 0) continue
 
     try {
       const { code, data } = await getSiteFavicon<{ iconUrl: string }>(url)

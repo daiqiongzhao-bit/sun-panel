@@ -13,6 +13,7 @@ declare namespace User{
 		// userId?:string // id代替
 		token?:string
 		isAdmin?:number
+		permissions?: string[]
 	}
 
 	interface GetReferralCodeResponse{

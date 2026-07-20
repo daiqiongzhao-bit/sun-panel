@@ -11,9 +11,9 @@ func InitItemIconGroup(router *gin.RouterGroup) {
 	itemIconGroup := api_v1.ApiGroupApp.ApiPanel.ItemIconGroup
 	r := router.Group("", middleware.LoginInterceptor)
 	{
-		r.POST("/panel/itemIconGroup/edit", itemIconGroup.Edit)
-		r.POST("/panel/itemIconGroup/deletes", itemIconGroup.Deletes)
-		r.POST("/panel/itemIconGroup/saveSort", itemIconGroup.SaveSort)
+		r.POST("/panel/itemIconGroup/edit", middleware.PermissionInterceptor("group:edit"), itemIconGroup.Edit)
+		r.POST("/panel/itemIconGroup/deletes", middleware.PermissionInterceptor("group:delete"), itemIconGroup.Deletes)
+		r.POST("/panel/itemIconGroup/saveSort", middleware.PermissionInterceptor("group:edit"), itemIconGroup.SaveSort)
 	}
 
 	// 公开模式

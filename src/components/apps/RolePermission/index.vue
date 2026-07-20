@@ -139,7 +139,6 @@ function createColumns({ edit, permissions, delete: del, toggleStatus }: { edit:
             options: [
               { label: t('common.edit'), key: 'edit' },
               { label: t('admin.setting.permissions'), key: 'permissions' },
-              { label: row.status === 1 ? t('common.inactive') : t('common.active'), key: 'toggleStatus' },
               { label: t('common.delete'), key: 'delete' },
             ],
           },
@@ -196,6 +195,59 @@ async function loadPermissionMatrix(roleId: number = 0) {
 async function loadRolePermissions(roleId: number) {
   // 加载带权限状态的权限矩阵
   await loadPermissionMatrix(roleId)
+  // 如果该角色当前没有任何权限配置（空白状态），根据角色类型自动填充默认权限
+  if (selectedRolePermissions.value.length === 0 && allPermissions.value.length > 0) {
+    const defaults = getDefaultPermissionsForRole(roleId)
+    if (defaults.length > 0) {
+      selectedRolePermissions.value = defaults
+    }
+  }
+}
+
+/**
+ * 根据角色 ID 或名称返回默认权限 ID 列表
+ * 超级管理员→全部权限；管理员→除角色/用户管理外的大部分权限；
+ * 部门管理员→部门相关+基础查看；普通用户→仅基础查看
+ */
+function getDefaultPermissionsForRole(roleId: number): number[] {
+  const role = roleList.value.find(r => r.id === roleId)
+  if (!role) return []
+  const roleName = (role.name || '').toLowerCase()
+  // 超级管理员：全选
+  if (roleId === 1 || roleName.includes('超级') || roleName.includes('super')) {
+    return allPermissions.value.map(p => p.id)
+  }
+  // 按模块名关键词分配权限
+  const result: number[] = []
+  for (const p of allPermissions.value) {
+    const modCode = (p.moduleCode || '').toLowerCase()
+    const permName = (p.permissionName || p.name || '').toLowerCase()
+    // 所有角色都有基础查看权限（不含 "删除"、"导出"、"导入"、"创建"、"编辑" 等写操作的关键词）
+    const isReadOnly = /list|get|view|查看|列表|详情|搜索|查询|read/.test(permName)
+    const isBasicModule = ['panel', 'notice', 'dashboard', 'monitor'].includes(modCode)
+      || modCode.includes('panel') || modCode.includes('notice')
+    // 管理员类：大部分模块的读写权限
+    if ((roleName.includes('管理') && !roleName.includes('普通')) || roleName.includes('admin')) {
+      // 排除：角色管理、用户管理的敏感操作
+      const isSensitive = modCode === 'role' || modCode === 'user'
+        || (modCode.includes('role') && /(delete|create|export|import)/.test(permName))
+        || (modCode.includes('user') && /(delete|reset|export|import)/.test(permName))
+      if (!isSensitive) result.push(p.id)
+      continue
+    }
+    // 部门管理员：部门相关 + 基础查看
+    if (roleName.includes('部门')) {
+      const isDeptRelated = modCode.includes('department') || modCode.includes('dept')
+        || modCode.includes('panel') || modCode.includes('notice')
+      if (isDeptRelated || isReadOnly) { result.push(p.id) }
+      continue
+    }
+    // 普通用户：仅有只读/查看权限
+    if (isReadOnly || isBasicModule) {
+      result.push(p.id)
+    }
+  }
+  return result
 }
 
 function handleAddRole() {

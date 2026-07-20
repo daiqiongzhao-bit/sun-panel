@@ -121,6 +121,8 @@ func assignDeptAdminPermissions() error {
 		"department:edit",
 		"department:create",
 		"system:view",
+		"setting:view",
+		"monitor:view",
 	}
 
 	var permissions []models.Permission
@@ -174,6 +176,7 @@ func InitDefaultPermissions() error {
 		{"task", "任务管理"},
 		{"paste", "粘贴板"},
 		{"about", "关于"},
+		{"group", "分组管理"},
 	}
 
 	defaultPermissions := []struct {
@@ -239,6 +242,10 @@ func InitDefaultPermissions() error {
 		{"paste", "paste:view", "查看"},
 		{"paste", "paste:create", "创建"},
 		{"about", "about:view", "查看"},
+		{"group", "group:view", "查看"},
+		{"group", "group:create", "创建"},
+		{"group", "group:edit", "编辑"},
+		{"group", "group:delete", "删除"},
 	}
 
 	defaultRoles := []struct {
@@ -318,21 +325,42 @@ func InitDefaultPermissions() error {
 		}
 	}
 
-	// 为"管理员"角色分配管理相关权限
+	// 为"管理员"角色补充管理相关权限（保留已有手动调整，仅补齐缺失项）
 	mgrRole := models.Role{}
 	if err := tx.Where("name=?", "管理员").First(&mgrRole).Error; err == nil {
-		var existingCount int64
-		tx.Model(&models.RolePermission{}).Where("role_id=?", mgrRole.ID).Count(&existingCount)
-		if existingCount == 0 {
-			// 管理员拥有除权限管理之外的大部分权限
-			var mgrPermissions []models.Permission
-			if err := tx.Where("module_code != ? OR module_code IS NULL", "permission").Find(&mgrPermissions).Error; err == nil {
-				for _, p := range mgrPermissions {
-					rp := models.RolePermission{
-						RoleId:       mgrRole.ID,
-						PermissionId: p.ID,
-					}
-					tx.Create(&rp)
+		var mgrPermissions []models.Permission
+		if err := tx.Where("module_code != ? OR module_code IS NULL", "permission").Find(&mgrPermissions).Error; err == nil {
+			for _, p := range mgrPermissions {
+				var cnt int64
+				tx.Model(&models.RolePermission{}).Where("role_id=? AND permission_id=?", mgrRole.ID, p.ID).Count(&cnt)
+				if cnt == 0 {
+					tx.Create(&models.RolePermission{RoleId: mgrRole.ID, PermissionId: p.ID})
+				}
+			}
+		}
+	}
+
+	// 为"普通用户"角色分配个人功能默认权限（补充缺失项，保留已有手动调整）
+	normalRole := models.Role{}
+	if err := tx.Where("name=?", "普通用户").First(&normalRole).Error; err == nil {
+		normalPermCodes := []string{
+			"dashboard:view",
+			"style:view", "style:edit",
+			"group:view", "group:create", "group:edit", "group:delete",
+			"file:view", "file:upload", "file:delete",
+			"icon:view", "icon:upload", "icon:delete",
+			"sticky_note:view", "sticky_note:create", "sticky_note:edit", "sticky_note:delete",
+			"import_export:export", "import_export:import",
+			"paste:view", "paste:create",
+			"monitor:view",
+		}
+		var normalPerms []models.Permission
+		if err := tx.Where("permission_id IN ?", normalPermCodes).Find(&normalPerms).Error; err == nil {
+			for _, p := range normalPerms {
+				var cnt int64
+				tx.Model(&models.RolePermission{}).Where("role_id=? AND permission_id=?", normalRole.ID, p.ID).Count(&cnt)
+				if cnt == 0 {
+					tx.Create(&models.RolePermission{RoleId: normalRole.ID, PermissionId: p.ID})
 				}
 			}
 		}

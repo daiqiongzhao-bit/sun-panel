@@ -18,6 +18,7 @@ type User struct {
 	Token        string `gorm:"type:varchar(32)" json:"token"`
 	DepartmentId uint   `gorm:"default:0;index" json:"departmentId"`                                                                // 部门ID，0表示无部门
 
+	Permissions  []string `gorm:"-" json:"permissions"` // 当前用户拥有的权限标识列表（运行时填充，不入库）
 	UserId uint `gorm:"-"  json:"userId"`
 }
 

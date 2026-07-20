@@ -10,11 +10,11 @@ import (
 func InitLogRouter(router *gin.RouterGroup) {
 	api := api_v1.ApiGroupApp.ApiSystem.LogApi
 
-	rAdmin := router.Group("", middleware.LoginInterceptor, middleware.AdminInterceptor)
+	rAdmin := router.Group("", middleware.LoginInterceptor)
 	{
-		rAdmin.POST("/log/operationList", api.GetOperationLogList)
-		rAdmin.POST("/log/loginList", api.GetLoginLogList)
-		rAdmin.POST("/log/clearOperation", api.ClearOperationLog)
-		rAdmin.POST("/log/clearLogin", api.ClearLoginLog)
+		rAdmin.POST("/log/operationList", middleware.PermissionInterceptor("operation_log:view"), api.GetOperationLogList)
+		rAdmin.POST("/log/loginList", middleware.PermissionInterceptor("login_log:view"), api.GetLoginLogList)
+		rAdmin.POST("/log/clearOperation", middleware.PermissionInterceptor("operation_log:clear"), api.ClearOperationLog)
+		rAdmin.POST("/log/clearLogin", middleware.PermissionInterceptor("login_log:clear"), api.ClearLoginLog)
 	}
 }

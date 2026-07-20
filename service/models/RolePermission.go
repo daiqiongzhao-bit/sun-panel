@@ -22,6 +22,22 @@ func (m *RolePermission) GetPermissionIdsByRoleId(roleId uint) ([]uint, error) {
 	return ids, err
 }
 
+// GetPermissionIdStringsByRoleId 返回该角色拥有的权限标识字符串列表（如 "user:delete"）
+func (m *RolePermission) GetPermissionIdStringsByRoleId(roleId int) ([]string, error) {
+	var permIds []uint
+	if err := Db.Model(m).Where("role_id=?", uint(roleId)).Pluck("permission_id", &permIds).Error; err != nil {
+		return nil, err
+	}
+	if len(permIds) == 0 {
+		return []string{}, nil
+	}
+	var permStrs []string
+	if err := Db.Model(&Permission{}).Where("id IN ?", permIds).Pluck("permission_id", &permStrs).Error; err != nil {
+		return nil, err
+	}
+	return permStrs, nil
+}
+
 func (m *RolePermission) BatchSave(roleId uint, permissionIds []uint) error {
 	return Db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Delete(&RolePermission{}, "role_id=?", roleId).Error; err != nil {

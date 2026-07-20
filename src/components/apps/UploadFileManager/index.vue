@@ -38,24 +38,38 @@ const infoModalState = ref<InfoModalState>({
 function getFileCategory(file: File.Info): string {
   const src = (file.src || '').toLowerCase()
   const fileName = (file.fileName || '').toLowerCase()
+  const ext = ((file as any).ext || '').toLowerCase()
 
-  // 图标类：明确的图标路径/名称特征
+  // === 图标类规则 ===
+
+  // 规则1：明确的图标路径/名称特征（手动上传到icon/logo目录、或文件名含关键词）
   if (src.includes('/icon/') || src.includes('/logo/') || fileName.includes('icon') || fileName.includes('favicon')
     || fileName.includes('.ico') || fileName.includes('logo'))
     return 'icon'
 
-  // 图标类：小尺寸图片（<200KB）且文件名为 UUID/哈希格式（典型的 favicon 自动获取结果）
-  const fileSize = Number(file.size) || 0
-  const isSmallImage = fileSize > 0 && fileSize < 200 * 1024 // < 200KB
-  const isHashLikeFileName = /^[a-f0-9\-]{8,}\.(png|jpg|jpeg|ico|svg|webp)$/.test(fileName)
-  if (isSmallImage && isHashLikeFileName)
+  // 规则2：文件名为域名格式 + 扩展名为图片类型 → getSiteFavicon 自动获取的 favicon
+  // 实际数据示例：fileName="jimeng.jianying.com" ext=".png" src="/uploads/2026/7/19/xxx.png"
+  // 域名特征：含至少一个点、像主机名（可带端口）、不含中文/空格/特殊字符
+  const isDomainLikeName = /^[a-z0-9][a-z0-9.\-_:]*[a-z0-9]$/.test(fileName)
+    && (fileName.match(/\./g) || []).length >= 1
+    && !fileName.includes('background') && !fileName.includes('wallpaper')
+    && !fileName.includes('壁纸') && !fileName.includes('bg') && !fileName.includes('loginbg')
+    && !fileName.includes(' ') && !fileName.includes('风景')
+  const isImageExt = ['.png', '.jpg', '.jpeg', '.ico', '.svg', '.webp'].includes(ext)
+  if (isDomainLikeName && isImageExt)
     return 'icon'
 
-  // 壁纸类（background目录、登录背景、主页背景、wallpaper等，其余默认也归壁纸）
+  // 规则3：扩展名明确是 .ico（无论文件名是什么，.ico 就是图标）
+  if (ext === '.ico' || fileName.endsWith('.ico'))
+    return 'icon'
+
+  // === 壁纸类规则 ===
   if (src.includes('/background/') || fileName.includes('background') || fileName.includes('bg')
     || fileName.includes('loginbg') || fileName.includes('壁纸') || fileName.includes('wallpaper')
-    || fileName.includes('风景') || fileName.includes('桌面') || fileName.includes('landscape'))
+    || fileName.includes('风景') || fileName.includes('桌面') || fileName.includes('landscape')
+    || fileName.includes('cover'))
     return 'wallpaper'
+
   // 默认为壁纸类（大多数上传的是壁纸/背景图）
   return 'wallpaper'
 }

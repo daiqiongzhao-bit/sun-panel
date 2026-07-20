@@ -9,12 +9,12 @@ import (
 
 func InitImportExportRouter(router *gin.RouterGroup) {
 	api := api_v1.ApiGroupApp.ApiSystem.ImportExportApi
-	// 需要管理员权限
-	r := router.Group("", middleware.LoginInterceptor, middleware.AdminInterceptor)
+	// 按细粒度权限校验（导入导出模块）
+	r := router.Group("", middleware.LoginInterceptor)
 	{
-		r.POST("/system/exportUsers", api.ExportUsers)
-		r.POST("/system/importUsers", api.ImportUsers)
-		r.POST("/system/exportRoles", api.ExportRoles)
-		r.POST("/system/importRoles", api.ImportRoles)
+		r.POST("/system/exportUsers", middleware.PermissionInterceptor("import_export:export"), api.ExportUsers)
+		r.POST("/system/importUsers", middleware.PermissionInterceptor("import_export:import"), api.ImportUsers)
+		r.POST("/system/exportRoles", middleware.PermissionInterceptor("import_export:export"), api.ExportRoles)
+		r.POST("/system/importRoles", middleware.PermissionInterceptor("import_export:import"), api.ImportRoles)
 	}
 }
