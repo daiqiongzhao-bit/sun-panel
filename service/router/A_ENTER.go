@@ -31,6 +31,7 @@ func InitRouters(addr string) error {
 	// WEB文件服务
 	{
 		webPath := "./web"
+		router.Use(middleware.CacheControlInterceptor())
 		router.Use(middleware.GzipInterceptor())
 		router.StaticFile("/", webPath+"/index.html")
 		router.Static("/assets", webPath+"/assets")
