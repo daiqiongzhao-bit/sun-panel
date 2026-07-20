@@ -58,6 +58,7 @@ COPY --from=server_image /build/assets/conf.example.ini /app/conf-default/conf.i
 COPY --from=server_image /build/assets/lang /app/assets/lang
 
 COPY entrypoint.sh /app/entrypoint.sh
+RUN sed -i 's/$//' /app/entrypoint.sh
 
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tzdata \
     && apt-get clean \
