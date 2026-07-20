@@ -38,6 +38,10 @@ func InitRouters(addr string) error {
 		router.Static("/custom", webPath+"/custom")
 		router.StaticFile("/favicon.ico", webPath+"/favicon.ico")
 		router.StaticFile("/favicon.svg", webPath+"/favicon.svg")
+		// SPA fallback：直接刷新 /login 等前端路由时返回 index.html
+		router.NoRoute(func(c *gin.Context) {
+			c.File(webPath + "/index.html")
+		})
 	}
 
 	// 上传的文件
