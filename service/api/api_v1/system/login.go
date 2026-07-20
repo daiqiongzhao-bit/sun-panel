@@ -10,7 +10,6 @@ import (
 	"sun-panel/api/api_v1/common/base"
 	"sun-panel/global"
 	"sun-panel/lib/cmn"
-	"sun-panel/lib/cmn/systemSetting"
 	"sun-panel/lib/totp"
 	"sun-panel/models"
 
@@ -71,9 +70,6 @@ func (l LoginApi) Login(c *gin.Context) {
 		apiReturn.ErrorParamFomat(c, errMsg)
 		return
 	}
-
-	settings := systemSetting.ApplicationSetting{}
-	global.SystemSetting.GetValueByInterface("system_application", &settings)
 
 	mUser := models.User{}
 	var (
