@@ -47,7 +47,7 @@ func (a *Openness) SetLoginConfig(c *gin.Context) {
 		apiReturn.Error(c, "保存失败："+err.Error())
 		return
 	}
-	apiReturn.Success(c, "保存成功")
+	apiReturn.SuccessData(c, "保存成功")
 }
 
 func (a *Openness) GetDisclaimer(c *gin.Context) {
