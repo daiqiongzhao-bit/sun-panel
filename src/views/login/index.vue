@@ -97,6 +97,7 @@ const finishLogin = (data: Login.LoginResponse) => {
 }
 
 const loginPost = async () => {
+  console.log('[DEBUG] loginPost called', form.value.username, form.value.password ? 'has-pass' : 'no-pass')
   if (!form.value.username) {
     ms.warning('请输入用户名')
     return
@@ -107,7 +108,9 @@ const loginPost = async () => {
   }
   loading.value = true
   try {
+    console.log('[DEBUG] calling login API')
     const res = await login<Login.LoginResponse>(form.value)
+    console.log('[DEBUG] login response', res)
     if (res.code === 0) {
       // 需要两步验证：进入第二步
       if (res.data.needTwoFA && res.data.twoFaToken) {
@@ -199,7 +202,12 @@ function handleChangeLanuage(value: Language) {
           {{ $t('common.appName') }}
         </NGradientText>
       </div>
-      <NForm :model="form" label-width="100px" @keydown.enter="twoFaStep ? login2faPost() : handleSubmit">
+      <NForm
+        :model="form"
+        label-width="100px"
+        @submit.prevent="twoFaStep ? login2faPost() : handleSubmit"
+        @keydown.enter="twoFaStep ? login2faPost() : handleSubmit"
+      >
         <template v-if="!twoFaStep">
           <NFormItem>
             <NInput v-model:value="form.username" :placeholder="$t('login.usernamePlaceholder')">
@@ -233,7 +241,7 @@ function handleChangeLanuage(value: Language) {
           <NInput v-model:value="form.vcode" type="text" placeholder="请输入图像验证码" />
         </NFormItem> -->
         <NFormItem style="margin-top: 10px">
-          <NButton type="primary" block :loading="loading" @click="twoFaStep ? login2faPost() : handleSubmit">
+          <NButton type="primary" attr-type="submit" block :loading="loading" @click="twoFaStep ? login2faPost() : handleSubmit">
             {{ twoFaStep ? '验证' : $t('login.loginButton') }}
           </NButton>
         </NFormItem>
@@ -284,6 +292,7 @@ function handleChangeLanuage(value: Language) {
       width: 100%; height: 100%;
       background: rgba(0,0,0,0.3);
       z-index: 0;
+      pointer-events: none;
     }
 
     /* 夜间模式 */
