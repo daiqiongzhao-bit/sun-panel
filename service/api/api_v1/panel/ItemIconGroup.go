@@ -26,12 +26,18 @@ func (a *ItemIconGroup) Edit(c *gin.Context) {
 		return
 	}
 
-	req.UserId = userInfo.ID
-	req.DepartmentId = userInfo.DepartmentId // 自动继承用户的部门
-
 	if req.ID != 0 {
-		// 修改
-		updateField := []string{"IconJson", "Icon", "Title", "Url", "LanUrl", "Description", "OpenMethod", "GroupId", "UserId"}
+		// 修改：先校验归属，非管理员只能改自己的分组
+		existing := models.ItemIconGroup{}
+		if err := global.Db.First(&existing, "id=?", req.ID).Error; err != nil {
+			apiReturn.ErrorDatabase(c, err.Error())
+			return
+		}
+		if userInfo.Role != department.ROLE_SUPER_ADMIN && existing.UserId != userInfo.ID {
+			apiReturn.ErrorNoAccess(c)
+			return
+		}
+		updateField := []string{"IconJson", "Icon", "Title", "Url", "LanUrl", "Description", "OpenMethod", "GroupId"}
 		if req.Sort != 0 {
 			updateField = append(updateField, "Sort")
 		}
@@ -39,7 +45,9 @@ func (a *ItemIconGroup) Edit(c *gin.Context) {
 			Select(updateField).
 			Where("id=?", req.ID).Updates(&req)
 	} else {
-		// 创建
+		// 创建：归属当前用户，自动继承部门
+		req.UserId = userInfo.ID
+		req.DepartmentId = userInfo.DepartmentId
 		global.Db.Create(&req)
 	}
 

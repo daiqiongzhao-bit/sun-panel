@@ -24,8 +24,8 @@ func GetUserVisibleDepartmentIds(user models.User) ([]uint, bool) {
 	}
 
 	if user.DepartmentId == 0 {
-		// 用户未分配部门，只能看自己的数据（department_id=0 的个人数据）
-		return []uint{0}, false
+		// 用户未分配部门：严格只看自己的数据，不做任何部门共享
+		return []uint{}, false
 	}
 
 	// 部门管理员：获取本部门 + 所有子部门
@@ -64,5 +64,9 @@ func BuildDepartmentScope(db *gorm.DB, userId uint, user models.User) *gorm.DB {
 	}
 
 	// 用户可以看到：自己的数据 + 所在部门的数据
+	if len(deptIds) == 0 {
+		// 无部门或部门范围为空：仅过滤为自己的数据
+		return db.Where("user_id = ?", userId)
+	}
 	return db.Where("user_id = ? OR department_id IN ?", userId, deptIds)
 }
