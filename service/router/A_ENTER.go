@@ -1,6 +1,10 @@
 package router
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
+
 	"sun-panel/api/api_v1/middleware"
 	"sun-panel/global"
 	// "sun-panel/router/admin"
@@ -38,8 +42,27 @@ func InitRouters(addr string) error {
 		router.Static("/custom", webPath+"/custom")
 		router.StaticFile("/favicon.ico", webPath+"/favicon.ico")
 		router.StaticFile("/favicon.svg", webPath+"/favicon.svg")
-		// SPA fallback：直接刷新 /login 等前端路由时返回 index.html
+
+		// PWA 静态产物：手机「添加到主屏幕」与离线缓存所需
+		router.GET("/manifest.webmanifest", func(c *gin.Context) {
+			c.Header("Content-Type", "application/manifest+json")
+			c.File(webPath + "/manifest.webmanifest")
+		})
+		router.StaticFile("/sw.js", webPath+"/sw.js")
+		router.StaticFile("/registerSW.js", webPath+"/registerSW.js")
+		router.StaticFile("/pwa-192x192.png", webPath+"/pwa-192x192.png")
+		router.StaticFile("/pwa-512x512.png", webPath+"/pwa-512x512.png")
+
+		// SPA fallback：真实文件优先服务（覆盖 workbox-*.js 等构建产物），否则返回 index.html
 		router.NoRoute(func(c *gin.Context) {
+			rel := c.Request.URL.Path
+			abs := filepath.Join(webPath, filepath.Clean("/"+rel))
+			if strings.HasPrefix(abs, filepath.Clean(webPath)) {
+				if info, err := os.Stat(abs); err == nil && !info.IsDir() {
+					c.File(abs)
+					return
+				}
+			}
 			c.File(webPath + "/index.html")
 		})
 	}
