@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { NButton, NColorPicker, NInput, NRadio, NUpload } from 'naive-ui'
 import type { UploadFileInfo } from 'naive-ui'
-import { computed, defineProps } from 'vue'
+import { computed } from 'vue'
 import { ItemIcon } from '@/components/common'
 import { useAuthStore } from '@/store'
 import { apiRespErrMsg } from '@/utils/request/apiMessage'
 
 const props = defineProps<{
   itemIcon: Panel.ItemIcon | null
+  name?: string
+  url?: string
 }>()
 const emit = defineEmits<{
   (e: 'update:itemIcon', visible: Panel.ItemIcon): void // 定义修改父组件（prop内）的值的事件
@@ -117,7 +119,7 @@ const handleUploadFinish = ({
       <div class="flex">
         <div>
           <div class="border rounded-2xl bg-slate-200 overflow-hidden rounded-2xl transparent-grid">
-            <ItemIcon :item-icon="itemIconInfo" />
+            <ItemIcon :item-icon="itemIconInfo" :name="props.name" :url="props.url" />
           </div>
         </div>
         <!-- 文字 -->

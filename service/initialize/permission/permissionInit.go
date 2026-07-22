@@ -98,17 +98,27 @@ func InitPermissionMatrix(filePath string) error {
 
 	tx.Commit()
 
-	// 为部门管理员分配默认权限
-	assignDeptAdminPermissions()
+	// 为部门管理员分配默认权限（仅当没有任何权限时）
+	assignDeptAdminPermissionsIfEmpty()
 
 	return nil
 }
 
-// assignDeptAdminPermissions 为部门管理员角色分配默认权限
-func assignDeptAdminPermissions() error {
+// assignDeptAdminPermissionsIfEmpty 仅在部门管理员角色没有任何权限时分配默认权限
+// 避免每次启动覆盖管理员在角色权限页做的自定义调整
+func assignDeptAdminPermissionsIfEmpty() error {
 	deptAdminRole := models.Role{}
 	if err := models.Db.Where("name=?", "部门管理员").First(&deptAdminRole).Error; err != nil {
 		return nil // 角色不存在则跳过
+	}
+
+	// 如果已有权限，不再覆盖
+	var cnt int64
+	if err := models.Db.Model(&models.RolePermission{}).Where("role_id=?", deptAdminRole.ID).Count(&cnt).Error; err != nil {
+		return err
+	}
+	if cnt > 0 {
+		return nil
 	}
 
 	// 部门管理员可拥有的权限ID列表
@@ -130,12 +140,8 @@ func assignDeptAdminPermissions() error {
 		return err
 	}
 
-	// 清理旧权限并分配新权限
+	// 当前没有任何权限，直接分配默认权限
 	tx := models.Db.Begin()
-	if err := tx.Delete(&models.RolePermission{}, "role_id=?", deptAdminRole.ID).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
 	for _, p := range permissions {
 		rp := models.RolePermission{
 			RoleId:       deptAdminRole.ID,
@@ -211,6 +217,8 @@ func InitDefaultPermissions() error {
 		{"gallery", "gallery:upload", "上传"},
 		{"gallery", "gallery:delete", "删除"},
 		{"icon", "icon:view", "查看"},
+		{"icon", "icon:create", "创建"},
+		{"icon", "icon:edit", "编辑"},
 		{"icon", "icon:upload", "上传"},
 		{"icon", "icon:delete", "删除"},
 		{"setting", "setting:view", "查看"},
@@ -241,6 +249,8 @@ func InitDefaultPermissions() error {
 		{"task", "task:delete", "删除"},
 		{"paste", "paste:view", "查看"},
 		{"paste", "paste:create", "创建"},
+		{"paste", "paste:edit", "编辑"},
+		{"paste", "paste:delete", "删除"},
 		{"about", "about:view", "查看"},
 		{"group", "group:view", "查看"},
 		{"group", "group:create", "创建"},
@@ -285,6 +295,23 @@ func InitDefaultPermissions() error {
 		}
 	}
 
+	// 首次创建系统内置角色时赋予默认权限；已存在的角色不再覆盖，确保管理员自定义持久化
+	defaultRolePermissions := map[string][]string{
+		"普通用户": {
+			"dashboard:view",
+			"style:view", "style:edit",
+			"group:view",
+			"file:view",
+			"icon:view",
+			"sticky_note:view", "sticky_note:create", "sticky_note:edit", "sticky_note:delete",
+			"paste:view", "paste:create",
+			"monitor:view",
+			"about:view",
+		},
+		"管理员": nil, // nil 表示全量权限
+	}
+
+	createdRoleIds := make(map[string]uint)
 	for _, role := range defaultRoles {
 		var exists models.Role
 		if err := tx.Where("name=?", role.Name).First(&exists).Error; err != nil {
@@ -296,6 +323,33 @@ func InitDefaultPermissions() error {
 			if err := tx.Create(&newRole).Error; err != nil {
 				tx.Rollback()
 				return fmt.Errorf("创建角色失败: %v", err)
+			}
+			createdRoleIds[role.Name] = newRole.ID
+		}
+	}
+
+	// 为本次新创建的角色分配默认权限
+	var allPermissions []models.Permission
+	if err := tx.Find(&allPermissions).Error; err == nil {
+		permIdByCode := make(map[string]uint)
+		for _, p := range allPermissions {
+			permIdByCode[p.PermissionId] = p.ID
+		}
+		for roleName, roleId := range createdRoleIds {
+			permCodes := defaultRolePermissions[roleName]
+			if permCodes == nil {
+				// 管理员：分配全部权限（除权限管理模块，保留给超级管理员）
+				for _, p := range allPermissions {
+					if p.ModuleCode != "permission" {
+						tx.Create(&models.RolePermission{RoleId: roleId, PermissionId: p.ID})
+					}
+				}
+			} else {
+				for _, code := range permCodes {
+					if pid, ok := permIdByCode[code]; ok {
+						tx.Create(&models.RolePermission{RoleId: roleId, PermissionId: pid})
+					}
+				}
 			}
 		}
 	}
@@ -325,51 +379,13 @@ func InitDefaultPermissions() error {
 		}
 	}
 
-	// 为"管理员"角色补充管理相关权限（保留已有手动调整，仅补齐缺失项）
-	mgrRole := models.Role{}
-	if err := tx.Where("name=?", "管理员").First(&mgrRole).Error; err == nil {
-		var mgrPermissions []models.Permission
-		if err := tx.Where("module_code != ? OR module_code IS NULL", "permission").Find(&mgrPermissions).Error; err == nil {
-			for _, p := range mgrPermissions {
-				var cnt int64
-				tx.Model(&models.RolePermission{}).Where("role_id=? AND permission_id=?", mgrRole.ID, p.ID).Count(&cnt)
-				if cnt == 0 {
-					tx.Create(&models.RolePermission{RoleId: mgrRole.ID, PermissionId: p.ID})
-				}
-			}
-		}
-	}
-
-	// 为"普通用户"角色分配个人功能默认权限（补充缺失项，保留已有手动调整）
-	normalRole := models.Role{}
-	if err := tx.Where("name=?", "普通用户").First(&normalRole).Error; err == nil {
-		normalPermCodes := []string{
-			"dashboard:view",
-			"style:view", "style:edit",
-			"group:view", "group:create", "group:edit", "group:delete",
-			"file:view", "file:upload", "file:delete",
-			"icon:view", "icon:upload", "icon:delete",
-			"sticky_note:view", "sticky_note:create", "sticky_note:edit", "sticky_note:delete",
-			"import_export:export", "import_export:import",
-			"paste:view", "paste:create",
-			"monitor:view",
-		}
-		var normalPerms []models.Permission
-		if err := tx.Where("permission_id IN ?", normalPermCodes).Find(&normalPerms).Error; err == nil {
-			for _, p := range normalPerms {
-				var cnt int64
-				tx.Model(&models.RolePermission{}).Where("role_id=? AND permission_id=?", normalRole.ID, p.ID).Count(&cnt)
-				if cnt == 0 {
-					tx.Create(&models.RolePermission{RoleId: normalRole.ID, PermissionId: p.ID})
-				}
-			}
-		}
-	}
+	// 注意：不再自动给"管理员"和"普通用户"补充默认权限，避免覆盖管理员在角色权限页做的自定义调整。
+	// 仅当角色完全不存在的系统首次初始化时，由管理员手动在"角色权限"页面配置。
 
 	tx.Commit()
 
-	// 为部门管理员分配默认权限
-	assignDeptAdminPermissions()
+	// 为部门管理员分配默认权限（仅当该角色没有任何权限时，避免覆盖手动配置）
+	assignDeptAdminPermissionsIfEmpty()
 
 	return nil
 }

@@ -16,7 +16,7 @@ RUN pnpm install --unsafe-perm
 COPY . /build
 
 # 追加版本号到 .env，不要覆盖原有的 VITE_GLOB_API_URL 等配置
-RUN echo "VITE_APP_VERSION=1.3.8" >> /build/.env
+RUN echo "VITE_APP_VERSION=1.3.10" >> /build/.env
 
 RUN pnpm run build
 

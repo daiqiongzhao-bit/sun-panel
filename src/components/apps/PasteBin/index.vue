@@ -4,6 +4,14 @@ import { NButton, NCheckbox, NDataTable, NDatePicker, NInput, NInputGroup, NModa
 import type { UploadFileInfo } from 'naive-ui'
 import { t } from '@/locales'
 import { createPasteBin, updatePasteBin, getMyPasteBinList, getPasteBinAccessUrl } from '@/api/panel/pasteBin'
+import { useAuthStore } from '@/store'
+
+const authStore = useAuthStore()
+
+function hasPerm(perm: string): boolean {
+  const perms: string[] = authStore.userInfo?.permissions || []
+  return authStore.userInfo?.role === 1 || perms.includes(perm)
+}
 
 const ms = useMessage()
 
@@ -259,12 +267,15 @@ const columns = [
     key: 'action',
     width: 210,
     render(row: PasteBinItem) {
-      return h('div', { class: 'flex items-center gap-1' }, [
+      const buttons = [
         h(NButton, { size: 'tiny', tertiary: true, onClick: () => copyAccessUrl(row) },
           { default: () => t('apps.pasteBin.copyUrl') }),
-        h(NButton, { size: 'tiny', tertiary: true, onClick: () => openEditModal(row) },
-          { default: () => t('common.edit') }),
-      ])
+      ]
+      if (hasPerm('paste:edit')) {
+        buttons.push(h(NButton, { size: 'tiny', tertiary: true, onClick: () => openEditModal(row) },
+          { default: () => t('common.edit') }))
+      }
+      return h('div', { class: 'flex items-center gap-1' }, buttons)
     },
   },
 ]
@@ -278,7 +289,7 @@ onMounted(() => {
   <div class="paste-bin-page">
     <div class="flex items-center justify-between mb-4">
       <h3 class="text-lg font-bold">{{ t('apps.pasteBin.appName') }}</h3>
-      <NButton type="primary" @click="openCreateModal">
+      <NButton v-if="hasPerm('paste:create')" type="primary" @click="openCreateModal">
         {{ t('apps.pasteBin.create') }}
       </NButton>
     </div>

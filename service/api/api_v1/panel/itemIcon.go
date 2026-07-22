@@ -178,8 +178,12 @@ func (a *ItemIcon) Deletes(c *gin.Context) {
 	}
 
 	userInfo, _ := base.GetCurrentUserInfo(c)
-	// 超级管理员可以删所有；部门管理员和普通用户只能删自己创建的
-	deleteQuery := global.Db.Delete(&models.ItemIcon{}, "id in ? AND user_id=?", req.Ids, userInfo.ID)
+	// 超级管理员可以删所有；其他用户只能删自己创建的
+	q := global.Db.Where("id in ?", req.Ids)
+	if userInfo.Role != department.ROLE_SUPER_ADMIN {
+		q = q.Where("user_id=?", userInfo.ID)
+	}
+	deleteQuery := q.Delete(&models.ItemIcon{})
 	if deleteQuery.Error != nil {
 		apiReturn.ErrorDatabase(c, deleteQuery.Error.Error())
 		return
@@ -198,17 +202,22 @@ func (a *ItemIcon) SaveSort(c *gin.Context) {
 	}
 
 	userInfo, _ := base.GetCurrentUserInfo(c)
+	// 超级管理员可排序任意图标；其他用户只能排序自己的
+	scopeUserId := userInfo.ID
+	if userInfo.Role == department.ROLE_SUPER_ADMIN {
+		scopeUserId = 0
+	}
 
 	transactionErr := global.Db.Transaction(func(tx *gorm.DB) error {
-		// 在事务中执行一些 db 操作（从这里开始，您应该使用 'tx' 而不是 'db'）
 		for _, v := range req.SortItems {
-			if err := tx.Model(&models.ItemIcon{}).Where("user_id=? AND id=? AND item_icon_group_id=?", userInfo.ID, v.Id, req.ItemIconGroupId).Update("sort", v.Sort).Error; err != nil {
-				// 返回任何错误都会回滚事务
+			q := tx.Model(&models.ItemIcon{}).Where("id=? AND item_icon_group_id=?", v.Id, req.ItemIconGroupId)
+			if scopeUserId > 0 {
+				q = q.Where("user_id=?", scopeUserId)
+			}
+			if err := q.Update("sort", v.Sort).Error; err != nil {
 				return err
 			}
 		}
-
-		// 返回 nil 提交事务
 		return nil
 	})
 
@@ -242,21 +251,16 @@ func (a *ItemIcon) GetSiteFavicon(c *gin.Context) {
 			}
 		}
 	}
-	fullUrl := ""
-	if iconUrl, err := siteFavicon.GetOneFaviconURL(req.Url); err != nil {
-		// 兜底：目标站点未提供 favicon 时，使用公共 favicon 服务
-		if parsed, perr := url.Parse(req.Url); perr == nil && parsed.Host != "" {
-			fallback := fmt.Sprintf("https://icons.duckduckgo.com/ip3/%s.ico", parsed.Host)
-			if _, herr := siteFavicon.GetRemoteFileSize(fallback); herr == nil {
-				fullUrl = fallback
-			}
-		}
-		if fullUrl == "" {
-			apiReturn.Error(c, "acquisition failed: get ico error:"+err.Error())
-			return
-		}
-	} else {
-		fullUrl = iconUrl
+	fullUrl, favErr := siteFavicon.GetOneFaviconURL(req.Url)
+	if favErr != nil {
+		apiReturn.Error(c, "acquisition failed: get ico error:"+favErr.Error())
+		return
+	}
+	if fullUrl == "" {
+		// 所有公共 favicon 服务均不可达：返回空图标地址，前端据此显示占位图标，不再报错
+		resp.IconUrl = ""
+		apiReturn.SuccessData(c, resp)
+		return
 	}
 
 	parsedURL, err := url.Parse(req.Url)
@@ -306,8 +310,15 @@ func (a *ItemIcon) GetSiteFavicon(c *gin.Context) {
 		}
 	}
 
-	// 保存到数据库
-	ext := path.Ext(fullUrl)
+	// 保存到数据库（扩展名去掉查询串/锚点，无法识别时默认 .ico，确保 ico/svg 被正确归类）
+	cleanFullURL := fullUrl
+	if idx := strings.IndexAny(cleanFullURL, "?#"); idx >= 0 {
+		cleanFullURL = cleanFullURL[:idx]
+	}
+	ext := strings.ToLower(path.Ext(cleanFullURL))
+	if ext == "" {
+		ext = ".ico"
+	}
 	mFile := models.File{}
 	if _, err := mFile.AddFile(userInfo.ID, parsedURL.Host, ext, imgInfo.Name(), "icon"); err != nil {
 		apiReturn.ErrorDatabase(c, err.Error())

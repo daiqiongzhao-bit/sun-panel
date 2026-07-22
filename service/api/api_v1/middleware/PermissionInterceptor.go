@@ -3,6 +3,7 @@ package middleware
 import (
 	"sun-panel/api/api_v1/common/apiReturn"
 	"sun-panel/api/api_v1/common/base"
+	"sun-panel/global"
 	"sun-panel/lib/department"
 	"sun-panel/models"
 
@@ -25,6 +26,14 @@ func PermissionInterceptor(requiredPerm string) gin.HandlerFunc {
 		// 超级管理员拥有全部权限，直接放行
 		if currentUser.Role == department.ROLE_SUPER_ADMIN {
 			c.Next()
+			return
+		}
+
+		// 校验角色是否存在且启用
+		mRole := models.Role{}
+		if err := global.Db.Where("id=?", currentUser.Role).First(&mRole).Error; err != nil || mRole.Status != 1 {
+			apiReturn.ErrorNoAccess(c)
+			c.Abort()
 			return
 		}
 
@@ -67,6 +76,15 @@ func PermissionInterceptorAny(requiredPerms ...string) gin.HandlerFunc {
 			c.Next()
 			return
 		}
+
+		// 校验角色是否存在且启用
+		mRole := models.Role{}
+		if err := global.Db.Where("id=?", currentUser.Role).First(&mRole).Error; err != nil || mRole.Status != 1 {
+			apiReturn.ErrorNoAccess(c)
+			c.Abort()
+			return
+		}
+
 		if len(requiredPerms) == 0 {
 			c.Next()
 			return

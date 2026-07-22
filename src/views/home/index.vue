@@ -46,6 +46,11 @@ const dialog = useDialog()
 const panelState = usePanelState()
 const authStore = useAuthStore()
 
+function hasPerm(perm: string): boolean {
+  const perms: string[] = authStore.userInfo?.permissions || []
+  return authStore.userInfo?.role === 1 || perms.includes(perm)
+}
+
 const scrollContainerRef = ref<HTMLElement | undefined>(undefined)
 
 const editItemInfoShow = ref<boolean>(false)
@@ -319,13 +324,18 @@ function getDropdownMenuOptions() {
   }
 
   if (authStore.visitMode === VisitMode.VISIT_MODE_LOGIN) {
-    dropdownMenuOptions.push({
-      label: t('common.edit'),
-      key: 'edit',
-    }, {
-      label: t('common.delete'),
-      key: 'delete',
-    })
+    if (hasPerm('icon:edit')) {
+      dropdownMenuOptions.push({
+        label: t('common.edit'),
+        key: 'edit',
+      })
+    }
+    if (hasPerm('icon:delete')) {
+      dropdownMenuOptions.push({
+        label: t('common.delete'),
+        key: 'delete',
+      })
+    }
   }
 
   return dropdownMenuOptions
@@ -466,7 +476,40 @@ function handleAddItem(itemIconGroupId?: number) {
     currentAddItenIconGroupId.value = itemIconGroupId
 }
 
-// 一键获取所有图标：批量从 URL 获取 favicon
+// 并发池：手写 p-limit 思路，限制同时进行的请求数量，避免引入新依赖。
+function createConcurrencyPool(limit: number) {
+  let activeCount = 0
+  const waiting: Array<() => void> = []
+
+  const runNext = () => {
+    if (activeCount >= limit) return
+    const task = waiting.shift()
+    if (!task) return
+    activeCount++
+    task()
+  }
+
+  return {
+    run<T>(fn: () => Promise<T>): Promise<T> {
+      return new Promise<T>((resolve, reject) => {
+        waiting.push(() => {
+          fn()
+            .then(resolve, reject)
+            .finally(() => {
+              activeCount--
+              runNext()
+            })
+        })
+        runNext()
+      })
+    },
+  }
+}
+
+// 批量获取图标时的最大并发数
+const BATCH_CONCURRENCY = 5
+
+// 一键获取所有图标：并发批量从 URL 获取 favicon
 const batchFetchLoading = ref(false)
 async function handleBatchFetchIcons(itemGroupIndex: number) {
   const group = items.value[itemGroupIndex]
@@ -477,45 +520,68 @@ async function handleBatchFetchIcons(itemGroupIndex: number) {
   let failCount = 0
   let skipCount = 0
 
+  // 收集需要处理的条目：只要「有 URL」就纳入批量获取（不再跳过已有图标的条目，实现批量刷新全部图标）
+  const targets: { index: number; item: Panel.ItemInfo; url: string }[] = []
   for (let i = 0; i < group.items.length; i++) {
     const item = group.items[i]
-    // 只处理有 URL 的条目
     const url = (item.url || item.lanUrl || '').trim()
     if (!url) { skipCount++; continue }
-    // 跳过已有有效图片类图标(itemType=2 且 src 非空)的条目
-    if (item.icon?.itemType === 2 && item.icon.src && item.icon.src.length > 0) { skipCount++; continue }
+    targets.push({ index: i, item, url })
+  }
 
-    let ok = false
-    // 失败重试 1 次
-    for (let attempt = 0; attempt < 2 && !ok; attempt++) {
-      try {
-        const { code, data } = await getSiteFavicon<{ iconUrl: string }>(url)
-        if (code === 0 && data?.iconUrl) {
-          // 必须带上 itemIconGroupId，否则后端 Edit 会因缺少分组而报错
-          const updatedItem = {
-            ...item,
-            itemIconGroupId: (item as any).itemIconGroupId || group.id,
-            icon: { itemType: 2, src: data.iconUrl },
+  // 没有任何需要获取的目标：直接提示并退出
+  if (targets.length === 0) {
+    batchFetchLoading.value = false
+    ms.warning(`获取完成：成功 0 个，跳过 ${skipCount} 个`)
+    getList()
+    return
+  }
+
+  // 结果状态：0=成功 1=跳过(后端返回空图标，占位) 2=失败
+  const status: number[] = new Array(targets.length).fill(2)
+  const pool = createConcurrencyPool(BATCH_CONCURRENCY)
+
+  await Promise.all(
+    targets.map((t, ti) =>
+      pool.run(async () => {
+        try {
+          const { code, data } = await getSiteFavicon<{ iconUrl: string }>(t.url)
+          if (code === 0 && data?.iconUrl) {
+            // 必须带上 itemIconGroupId，否则后端 Edit 会因缺少分组而报错
+            const updatedItem = {
+              ...t.item,
+              itemIconGroupId: (t.item as any).itemIconGroupId || group.id,
+              icon: { itemType: 2, src: data.iconUrl },
+            }
+            await edit<Panel.ItemInfo>(updatedItem)
+            // 更新本地数据
+            items.value[itemGroupIndex].items![t.index] = {
+              ...items.value[itemGroupIndex].items![t.index],
+              icon: { itemType: 2, src: data.iconUrl },
+            }
+            status[ti] = 0
           }
-          await edit<Panel.ItemInfo>(updatedItem)
-          // 更新本地数据
-          items.value[itemGroupIndex].items[i] = {
-            ...items.value[itemGroupIndex].items[i],
-            icon: { itemType: 2, src: data.iconUrl },
+          else if (code === 0) {
+            // 后端返回空图标（所有公共服务不可达）：保持原样，前端显示占位图标，不计入失败
+            status[ti] = 1
           }
-          successCount++
-          ok = true
+          else {
+            // 后端返回非 0 业务码
+            status[ti] = 2
+          }
         }
-      }
-      catch {
-        // 忽略，进入重试/失败计数
-      }
-      if (!ok)
-        await new Promise(resolve => setTimeout(resolve, 300))
-    }
-    if (!ok) failCount++
-    // 限速，避免请求过快
-    await new Promise(resolve => setTimeout(resolve, 200))
+        catch {
+          // 网络或请求异常：计入失败
+          status[ti] = 2
+        }
+      }),
+    ),
+  )
+
+  for (const s of status) {
+    if (s === 0) successCount++
+    else if (s === 1) skipCount++
+    else failCount++
   }
 
   batchFetchLoading.value = false
@@ -614,10 +680,10 @@ async function handleBatchFetchIcons(itemGroupIndex: number) {
                 class="group-buttons ml-2 delay-100 transition-opacity flex"
                 :class="itemGroup.hoverStatus ? 'opacity-100' : 'opacity-0'"
               >
-                <span class="mr-2 cursor-pointer" :title="t('common.add')" @click="handleAddItem(itemGroup.id)">
+                <span v-if="hasPerm('icon:create') || hasPerm('icon:upload')" class="mr-2 cursor-pointer" :title="t('common.add')" @click="handleAddItem(itemGroup.id)">
                   <SvgIcon class="text-white font-xl" icon="typcn:plus" />
                 </span>
-                <span class="mr-2 cursor-pointer " :title="t('common.sort')" @click="handleSetSortStatus(itemGroupIndex, !itemGroup.sortStatus)">
+                <span v-if="hasPerm('icon:edit')" class="mr-2 cursor-pointer " :title="t('common.sort')" @click="handleSetSortStatus(itemGroupIndex, !itemGroup.sortStatus)">
                   <SvgIcon class="text-white font-xl" icon="ri:drag-drop-line" />
                 </span>
                 <NButton
@@ -658,7 +724,7 @@ async function handleBatchFetchIcons(itemGroupIndex: number) {
                     />
                   </div>
 
-                  <div v-if="itemGroup.items.length === 0" class="not-drag">
+                  <div v-if="itemGroup.items.length === 0 && (hasPerm('icon:create') || hasPerm('icon:upload'))" class="not-drag">
                     <AppIcon
                       :class="itemGroup.sortStatus ? 'cursor-move' : 'cursor-pointer'"
                       :item-info="{ icon: { itemType: 3, text: 'subway:add' }, title: t('common.add'), url: '', openMethod: 0 }"
@@ -696,7 +762,7 @@ async function handleBatchFetchIcons(itemGroupIndex: number) {
                     />
                   </div>
 
-                  <div v-if="itemGroup.items.length === 0" class="not-drag">
+                  <div v-if="itemGroup.items.length === 0 && (hasPerm('icon:create') || hasPerm('icon:upload'))" class="not-drag">
                     <AppIcon
                       class="cursor-pointer"
                       :item-info="{ icon: { itemType: 3, text: 'subway:add' }, title: $t('common.add'), url: '', openMethod: 0 }"

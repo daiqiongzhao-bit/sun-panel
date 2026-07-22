@@ -5,7 +5,15 @@ import { NButton, NCard, NForm, NFormItem, NInput, useDialog, useMessage } from 
 import { VueDraggable } from 'vue-draggable-plus'
 import { deletes, edit, getList, saveSort } from '@/api/panel/itemIconGroup'
 import { RoundCardModal, SvgIcon } from '@/components/common'
+import { useAuthStore } from '@/store'
 import { t } from '@/locales'
+
+const authStore = useAuthStore()
+
+function hasPerm(perm: string): boolean {
+  const perms: string[] = authStore.userInfo?.permissions || []
+  return authStore.userInfo?.role === 1 || perms.includes(perm)
+}
 
 interface EditModalArg {
   show: boolean
@@ -126,15 +134,15 @@ onMounted(() => {
 <template>
   <div class="h-full">
     <div class="p-2">
-      <NButton type="success" size="small" style="margin-right: 10px;" @click="handleAddGroup">
+      <NButton v-if="hasPerm('group:create')" type="success" size="small" style="margin-right: 10px;" @click="handleAddGroup">
         {{ $t('common.add') }}
       </NButton>
 
-      <NButton v-if="!sortStatus" size="small" @click="handleDragSort">
+      <NButton v-if="hasPerm('group:edit') && !sortStatus" size="small" @click="handleDragSort">
         {{ $t('common.sort') }}
       </NButton>
 
-      <NButton v-else type="warning" size="small" @click="handleSaveSort">
+      <NButton v-else-if="hasPerm('group:edit') && sortStatus" type="warning" size="small" @click="handleSaveSort">
         {{ $t('common.saveSort') }}
       </NButton>
     </div>
@@ -159,14 +167,14 @@ onMounted(() => {
                 </span>
               </div>
               <div class="ml-auto">
-                <span>
+                <span v-if="hasPerm('group:edit')">
                   <NButton strong secondary type="success" size="small" @click="handleEditGroup(item)">
                     <template #icon>
                       <SvgIcon icon="basil:edit-solid" />
                     </template>
                   </NButton>
                 </span>
-                <span class="ml-[10px]">
+                <span v-if="hasPerm('group:delete')" class="ml-[10px]">
                   <NButton strong secondary type="error" size="small" class="ml-[10px]" @click="handleDelete(item)">
                     <template #icon>
                       <SvgIcon icon="material-symbols:delete" />

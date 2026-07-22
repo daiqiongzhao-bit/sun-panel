@@ -21,15 +21,15 @@ func InitStickyNoteRouter(router *gin.RouterGroup) {
 func InitPasteBinRouter(router *gin.RouterGroup) {
 	api := api_v1.ApiGroupApp.ApiPanel.PasteBinApi
 
-	// 需要登录
+	// 需要登录 + 权限
 	rUser := router.Group("", middleware.LoginInterceptor)
 	{
-		rUser.POST("/panel/pasteBin/create", api.Create)
-		rUser.POST("/panel/pasteBin/update", api.Update)
-		rUser.POST("/panel/pasteBin/myList", api.GetMyList)
-		rUser.POST("/panel/pasteBin/delete", api.Delete)
-		rUser.POST("/panel/pasteBin/accessUrl", api.GetAccessUrl)
-		rUser.POST("/panel/pasteBin/uploadFile", api.UploadFile)
+		rUser.POST("/panel/pasteBin/create", middleware.PermissionInterceptor("paste:create"), api.Create)
+		rUser.POST("/panel/pasteBin/update", middleware.PermissionInterceptor("paste:edit"), api.Update)
+		rUser.POST("/panel/pasteBin/myList", middleware.PermissionInterceptor("paste:view"), api.GetMyList)
+		rUser.POST("/panel/pasteBin/delete", middleware.PermissionInterceptor("paste:delete"), api.Delete)
+		rUser.POST("/panel/pasteBin/accessUrl", middleware.PermissionInterceptor("paste:view"), api.GetAccessUrl)
+		rUser.POST("/panel/pasteBin/uploadFile", middleware.PermissionInterceptor("paste:create"), api.UploadFile)
 	}
 
 	// 无需登录（通过 code 访问）

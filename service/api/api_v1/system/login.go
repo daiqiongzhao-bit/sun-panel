@@ -168,6 +168,14 @@ func (l LoginApi) Login(c *gin.Context) {
 		return
 	}
 
+	// 角色已停用：拒绝登录（即便账号本身启用）
+	mRole := models.Role{}
+	if err := global.Db.Where("id=?", info.Role).First(&mRole).Error; err != nil || mRole.Status != 1 {
+		recordLoginLog(info.ID, info.Username, c, 2, "角色已停用")
+		apiReturn.Error(c, "角色已停用，无法登录")
+		return
+	}
+
 	// 已启用两步验证：不直接下发最终 token，返回 needTwoFA 让前端进入第二步
 	if info.TwoFAEnabled == 1 {
 		twoFaToken := cmn.BuildRandCode(32, cmn.RAND_CODE_MODE2)

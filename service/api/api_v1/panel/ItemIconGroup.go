@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"errors"
 	"math"
 	"sun-panel/api/api_v1/common/apiData/commonApiStructs"
 	"sun-panel/api/api_v1/common/apiReturn"
@@ -13,6 +14,11 @@ import (
 	"github.com/gin-gonic/gin/binding"
 	"gorm.io/gorm"
 )
+
+// errGroupNotOwned 表示当前用户不拥有待删除的分组（或分组不存在），
+// 例如试图删除共享分组（user_id 为 NULL）的非管理员用户。用于 Deletes 明确返回无权限错误，
+// 避免“删除接口返回成功、但分组刷新后又出现”的误导。
+var errGroupNotOwned = errors.New("the requested group(s) do not belong to the current user or do not exist")
 
 type ItemIconGroup struct {
 }
@@ -60,53 +66,26 @@ func (a *ItemIconGroup) GetList(c *gin.Context) {
 	visitMode := base.GetCurrentVisitMode(c)
 	groups := []models.ItemIconGroup{}
 
-	err := global.Db.Transaction(func(tx *gorm.DB) error {
-		query := tx.Order("sort ,created_at")
+	query := global.Db.Order("sort ,created_at")
 
-		if visitMode == base.VISIT_MODE_PUBLIC {
-			// 公开访问模式：保持原逻辑，只查公开用户的个人数据
-			query = query.Where("user_id=?", userInfo.ID)
-		} else {
-			// 登录模式：应用部门数据隔离
-			query = department.BuildDepartmentScope(query, userInfo.ID, userInfo)
-		}
+	if visitMode == base.VISIT_MODE_PUBLIC {
+		// 公开访问模式：保持原逻辑，只查公开用户的个人数据
+		query = query.Where("user_id=?", userInfo.ID)
+	} else {
+		// 登录模式：应用部门数据隔离
+		query = department.BuildDepartmentScope(query, userInfo.ID, userInfo)
+	}
 
-		if err := query.Find(&groups).Error; err != nil {
-			apiReturn.ErrorDatabase(c, err.Error())
-			return err
-		}
-
-		// 判断分组是否为空，为空将自动创建默认分组（仅登录模式且非公开模式）
-		if len(groups) == 0 && visitMode != base.VISIT_MODE_PUBLIC {
-			defaultGroup := models.ItemIconGroup{
-				Title:  "APP",
-				UserId: userInfo.ID,
-				Icon:   "material-symbols:ad-group-outline",
-			}
-			if err := tx.Create(&defaultGroup).Error; err != nil {
-				apiReturn.ErrorDatabase(c, err.Error())
-				return err
-			}
-
-			// 并将当前账号下所有无分组的图标更新到当前组
-			if err := tx.Model(&models.ItemIcon{}).Where("user_id=?", userInfo.ID).Update("item_icon_group_id", defaultGroup.ID).Error; err != nil {
-				apiReturn.ErrorDatabase(c, err.Error())
-				return err
-			}
-
-			groups = append(groups, defaultGroup)
-		}
-
-		// 返回 nil 提交事务
-		return nil
-	})
-
-	if err != nil {
+	if err := query.Find(&groups).Error; err != nil {
 		apiReturn.ErrorDatabase(c, err.Error())
 		return
-	} else {
-		apiReturn.SuccessListData(c, groups, 0)
 	}
+
+	// 注意：列表接口保持只读，不再自动创建默认分组。
+	// 早期实现会在分组为空时自动插入一个名为 "APP" 的默认分组，
+	// 导致用户删除该分组后，只要其可见分组集合变为空就会被重新创建，
+	// 表现为“删除后分组又出现”。删除行为现在完全由 Deletes 接口控制。
+	apiReturn.SuccessListData(c, groups, 0)
 }
 
 func (a *ItemIconGroup) Deletes(c *gin.Context) {
@@ -118,25 +97,45 @@ func (a *ItemIconGroup) Deletes(c *gin.Context) {
 	}
 	userInfo, _ := base.GetCurrentUserInfo(c)
 
+	// 超级管理员可删除任意分组；其他用户只能删除自己的分组
+	scopeUserId := userInfo.ID
+	if userInfo.Role == department.ROLE_SUPER_ADMIN {
+		scopeUserId = 0
+	}
+
 	var count int64
-	if err := global.Db.Model(&models.ItemIconGroup{}).Where(" user_id=?", userInfo.ID).Count(&count).Error; err != nil {
+	scope := global.Db.Model(&models.ItemIconGroup{})
+	if scopeUserId > 0 {
+		scope = scope.Where("user_id=?", scopeUserId)
+	}
+	if err := scope.Count(&count).Error; err != nil {
 		apiReturn.ErrorDatabase(c, err.Error())
 		return
-	} else {
-		if math.Abs(float64(len(req.Ids))-float64(count)) < 1 {
-			apiReturn.ErrorCode(c, 1201, "At least one must be retained", nil)
-			return
-		}
-
+	}
+	if math.Abs(float64(len(req.Ids))-float64(count)) < 1 {
+		apiReturn.ErrorCode(c, 1201, "At least one must be retained", nil)
+		return
 	}
 
 	txErr := global.Db.Transaction(func(tx *gorm.DB) error {
 		mitemIcon := models.ItemIcon{}
-		if err := tx.Delete(&models.ItemIconGroup{}, "id in ? AND user_id=?", req.Ids, userInfo.ID).Error; err != nil {
-			return err
+		q := tx.Where("id in ?", req.Ids)
+		if scopeUserId > 0 {
+			q = q.Where("user_id=?", scopeUserId)
+		}
+		deleteResult := q.Delete(&models.ItemIconGroup{})
+		if deleteResult.Error != nil {
+			return deleteResult.Error
 		}
 
-		if err := mitemIcon.DeleteByItemIconGroupIds(tx, userInfo.ID, req.Ids); err != nil {
+		// 非管理员只能删除自己拥有的分组。若实际未删除任何行，说明请求的分组不属于当前用户
+		// 或不存在（例如共享分组 user_id 为 NULL）。此时不应静默返回成功，否则前端会认为已删除、
+		// 刷新后分组又出现（即“删除后又出现”的问题），应明确返回错误。
+		if scopeUserId > 0 && deleteResult.RowsAffected == 0 {
+			return errGroupNotOwned
+		}
+
+		if err := mitemIcon.DeleteByItemIconGroupIds(tx, scopeUserId, req.Ids); err != nil {
 			return err
 		}
 
@@ -144,6 +143,10 @@ func (a *ItemIconGroup) Deletes(c *gin.Context) {
 	})
 
 	if txErr != nil {
+		if errors.Is(txErr, errGroupNotOwned) {
+			apiReturn.ErrorCode(c, 1005, "no permission to delete the requested group(s)", nil)
+			return
+		}
 		apiReturn.ErrorDatabase(c, txErr.Error())
 		return
 	}
@@ -162,16 +165,22 @@ func (a *ItemIconGroup) SaveSort(c *gin.Context) {
 
 	userInfo, _ := base.GetCurrentUserInfo(c)
 
+	// 超级管理员可排序任意分组；其他用户只能排序自己的分组
+	scopeUserId := userInfo.ID
+	if userInfo.Role == department.ROLE_SUPER_ADMIN {
+		scopeUserId = 0
+	}
+
 	transactionErr := global.Db.Transaction(func(tx *gorm.DB) error {
-		// 在事务中执行一些 db 操作（从这里开始，您应该使用 'tx' 而不是 'db'）
 		for _, v := range req.SortItems {
-			if err := tx.Model(&models.ItemIconGroup{}).Where("user_id=? AND id=?", userInfo.ID, v.Id).Update("sort", v.Sort).Error; err != nil {
-				// 返回任何错误都会回滚事务
+			q := tx.Model(&models.ItemIconGroup{}).Where("id=?", v.Id)
+			if scopeUserId > 0 {
+				q = q.Where("user_id=?", scopeUserId)
+			}
+			if err := q.Update("sort", v.Sort).Error; err != nil {
 				return err
 			}
 		}
-
-		// 返回 nil 提交事务
 		return nil
 	})
 

@@ -195,13 +195,7 @@ async function loadPermissionMatrix(roleId: number = 0) {
 async function loadRolePermissions(roleId: number) {
   // 加载带权限状态的权限矩阵
   await loadPermissionMatrix(roleId)
-  // 如果该角色当前没有任何权限配置（空白状态），根据角色类型自动填充默认权限
-  if (selectedRolePermissions.value.length === 0 && allPermissions.value.length > 0) {
-    const defaults = getDefaultPermissionsForRole(roleId)
-    if (defaults.length > 0) {
-      selectedRolePermissions.value = defaults
-    }
-  }
+  // 注意：不再自动填充默认权限，避免覆盖管理员手动清空/自定义的配置
 }
 
 /**

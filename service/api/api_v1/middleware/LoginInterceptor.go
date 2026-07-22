@@ -35,8 +35,14 @@ func LoginInterceptor(c *gin.Context) {
 		}
 	}
 
-	// 直接返回缓存的用户信息
+	// 直接返回缓存的用户信息（仍校验角色是否被停用，确保停用后立即失效）
 	if userInfo, success := global.UserToken.Get(token); success {
+		mRole := models.Role{}
+		if err := global.Db.Where("id=?", userInfo.Role).First(&mRole).Error; err != nil || mRole.Status != 1 {
+			apiReturn.ErrorCode(c, 1001, "角色已停用，请重新登录", nil)
+			c.Abort()
+			return
+		}
 		c.Set("userInfo", userInfo)
 		return
 	}
@@ -50,6 +56,13 @@ func LoginInterceptor(c *gin.Context) {
 		c.Abort()
 		return
 	} else {
+		// 校验角色是否被停用
+		mRole := models.Role{}
+		if err := global.Db.Where("id=?", info.Role).First(&mRole).Error; err != nil || mRole.Status != 1 {
+			apiReturn.ErrorCode(c, 1001, "角色已停用，请重新登录", nil)
+			c.Abort()
+			return
+		}
 		// 通过 设置当前用户信息
 		global.UserToken.SetDefault(info.Token, info)
 		global.CUserToken.SetDefault(cToken, token)

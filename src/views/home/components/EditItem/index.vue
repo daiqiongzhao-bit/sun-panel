@@ -115,11 +115,15 @@ async function getIconByUrl(url: string, loadingIndex: number) {
   getIconLoading.value[loadingIndex] = true
   try {
     const { code, data } = await getSiteFavicon<{ iconUrl: string }>(url)
-    if (code === 0) {
+    if (code === 0 && data?.iconUrl) {
       model.value.icon = {
         itemType: 2,
         src: data.iconUrl,
       }
+    }
+    else if (code === 0) {
+      // 后端返回空图标（所有公共服务不可达）：不写入空图标，提示用户
+      ms.warning(t('iconItem.geticonFail'))
     }
     else {
       ms.error(t('iconItem.geticonFail'))
@@ -184,7 +188,7 @@ function getGroupListOptions() {
         </NGrid>
 
         <NFormItem path="icon" :label="$t('common.icon')">
-          <IconEditor v-model:item-icon="model.icon" />
+          <IconEditor v-model:item-icon="model.icon" :name="model.title" :url="model.url || model.lanUrl" />
         </NFormItem>
         <NFormItem path="url" :label="$t('iconItem.url')">
           <!-- <NSelect :style="{ width: '100px' }" :options="urlProtocolOptions" /> -->

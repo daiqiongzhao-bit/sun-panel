@@ -1,6 +1,7 @@
 package system
 
 import (
+	"fmt"
 	"sun-panel/api/api_v1/common/apiReturn"
 	"sun-panel/api/api_v1/common/base"
 	"sun-panel/global"
@@ -116,7 +117,7 @@ func (a *PermissionApi) SaveRolePermissions(c *gin.Context) {
 		return
 	}
 
-	global.SystemSetting.Cache.Delete("role_permission_" + string(req.RoleId))
+	global.SystemSetting.Cache.Delete("role_permission_" + fmt.Sprintf("%d", req.RoleId))
 
 	apiReturn.Success(c)
 }

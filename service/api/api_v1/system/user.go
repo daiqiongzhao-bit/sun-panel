@@ -16,8 +16,12 @@ type UserApi struct{}
 
 func (a *UserApi) GetInfo(c *gin.Context) {
 	userInfo, _ := base.GetCurrentUserInfo(c)
-	mRolePermission := models.RolePermission{}
-	perms, _ := mRolePermission.GetPermissionIdStringsByRoleId(userInfo.Role)
+	perms := []string{}
+	// 角色被停用时不返回任何权限
+	if mRole, err := (&models.Role{}).GetById(uint(userInfo.Role)); err == nil && mRole.Status == 1 {
+		mRolePermission := models.RolePermission{}
+		perms, _ = mRolePermission.GetPermissionIdStringsByRoleId(userInfo.Role)
+	}
 	apiReturn.SuccessData(c, gin.H{
 		"userId":       userInfo.ID,
 		"id":           userInfo.ID,
@@ -34,8 +38,12 @@ func (a *UserApi) GetInfo(c *gin.Context) {
 func (a *UserApi) GetAuthInfo(c *gin.Context) {
 	userInfo, _ := base.GetCurrentUserInfo(c)
 	visitMode := base.GetCurrentVisitMode(c)
-	mRolePermission := models.RolePermission{}
-	perms, _ := mRolePermission.GetPermissionIdStringsByRoleId(userInfo.Role)
+	perms := []string{}
+	// 角色被停用时不返回任何权限
+	if mRole, err := (&models.Role{}).GetById(uint(userInfo.Role)); err == nil && mRole.Status == 1 {
+		mRolePermission := models.RolePermission{}
+		perms, _ = mRolePermission.GetPermissionIdStringsByRoleId(userInfo.Role)
+	}
 	user := models.User{}
 	user.ID = userInfo.ID
 	user.HeadImage = userInfo.HeadImage
